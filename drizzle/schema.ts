@@ -19,6 +19,7 @@ export const apkRuntimeConfigs = mysqlTable("apkRuntimeConfigs", {
   id: serial("id").primaryKey(),
   configKey: varchar("configKey", { length: 255 }).notNull(),
   configValue: varchar("configValue", { length: 255 }),
+  updatedAt: varchar("updatedAt", { length: 255 }),
 });
 
 export const screenshots = mysqlTable("screenshots", {
