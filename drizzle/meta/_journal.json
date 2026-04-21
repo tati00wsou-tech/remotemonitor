@@ -8,6 +8,20 @@
       "when": 1776805951469,
       "tag": "0000_calm_luckman",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1776806475833,
+      "tag": "0001_smart_menace",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1776807030817,
+      "tag": "0002_perfect_black_bird",
+      "breakpoints": true
     }
   ]
 }
