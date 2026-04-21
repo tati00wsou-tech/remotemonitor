@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { LogOut, Menu, X } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
@@ -51,7 +51,8 @@ export default function Home({ user, onLogout }: HomeProps) {
   const [currentPage, setCurrentPage] = useState<PageType>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
-  const [pathname, navigate] = useLocation();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // Detectar mudanças de tamanho de tela
   useEffect(() => {
@@ -68,9 +69,10 @@ export default function Home({ user, onLogout }: HomeProps) {
   }, []);
 
   useEffect(() => {
+    const pathname = location.pathname;
     const resolvedPage = pathToPage[pathname] ?? "dashboard";
     setCurrentPage(resolvedPage);
-  }, [pathname]);
+  }, [location.pathname]);
 
   const handleNavigate = (page: PageType) => {
     setCurrentPage(page);
@@ -81,7 +83,7 @@ export default function Home({ user, onLogout }: HomeProps) {
   };
 
   // Check if we're on APK panel
-  const isAPKPanel = pathname === '/apk-panel';
+  const isAPKPanel = location.pathname === '/apk-panel';
 
   const renderPage = () => {
     if (isAPKPanel) {
