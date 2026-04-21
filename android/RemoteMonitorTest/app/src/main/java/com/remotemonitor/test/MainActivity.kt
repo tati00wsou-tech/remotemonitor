@@ -14,7 +14,9 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.ComponentActivity
 import org.json.JSONObject
 import java.net.HttpURLConnection
+import java.net.URLEncoder
 import java.net.URL
+import java.nio.charset.StandardCharsets
 
 class MainActivity : ComponentActivity() {
     private lateinit var webView: WebView
@@ -113,7 +115,8 @@ class MainActivity : ComponentActivity() {
 
     private fun fetchRuntimePanelUrl(): String? {
         return try {
-            val endpoint = "${BuildConfig.BACKEND_BASE_URL}/api/apk/runtime-config"
+            val encodedPackage = URLEncoder.encode(BuildConfig.APPLICATION_ID, StandardCharsets.UTF_8.toString())
+            val endpoint = "${BuildConfig.BACKEND_BASE_URL}/api/apk/runtime-config?packageName=$encodedPackage"
             val connection = URL(endpoint).openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.connectTimeout = 10_000
