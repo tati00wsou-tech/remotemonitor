@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1775754288685,
+      "tag": "0000_steep_vanisher",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1775754481356,
+      "tag": "0001_blushing_fat_cobra",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1775757157521,
+      "tag": "0002_lying_retro_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1775778870411,
+      "tag": "0003_giant_imperial_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1775789184539,
+      "tag": "0004_magenta_starhawk",
+      "breakpoints": true
+    }
+  ]
+}
