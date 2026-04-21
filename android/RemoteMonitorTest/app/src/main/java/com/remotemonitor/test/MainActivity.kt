@@ -28,6 +28,23 @@ class MainActivity : ComponentActivity() {
 
         webView = WebView(this)
         webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                val clickedUrl = request?.url?.toString() ?: return false
+
+                if (clickedUrl == "app://retry") {
+                    hasOpenedExternalFallback = false
+                    loadPanelFromBackend()
+                    return true
+                }
+
+                if (clickedUrl == "app://open-browser") {
+                    openInExternalBrowser(lastTargetUrl)
+                    return true
+                }
+
+                return false
+            }
+
             override fun onReceivedError(
                 view: WebView?,
                 request: WebResourceRequest?,
@@ -35,7 +52,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 super.onReceivedError(view, request, error)
                 if (request?.isForMainFrame == true) {
-                    openInExternalBrowser(lastTargetUrl)
+                    showConnectionErrorScreen(error?.description?.toString())
                 }
             }
 
@@ -46,7 +63,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 super.onReceivedHttpError(view, request, errorResponse)
                 if (request?.isForMainFrame == true && (errorResponse?.statusCode ?: 200) >= 400) {
-                    openInExternalBrowser(lastTargetUrl)
+                    showConnectionErrorScreen("HTTP ${errorResponse?.statusCode ?: 0}")
                 }
             }
         }
@@ -70,6 +87,16 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadPanelFromBackend() {
+        runOnUiThread {
+            webView.loadDataWithBaseURL(
+                null,
+                loadingScreenHtml(),
+                "text/html",
+                "UTF-8",
+                null
+            )
+        }
+
         Thread {
             val runtimeUrl = fetchRuntimePanelUrl()
             val targetUrl = if (runtimeUrl.isNullOrBlank()) {
@@ -87,6 +114,46 @@ class MainActivity : ComponentActivity() {
                 webView.loadUrl(targetUrl)
             }
         }.start()
+    }
+
+    private fun loadingScreenHtml(): String {
+        return """
+            <html>
+              <body style=\"font-family:sans-serif;padding:24px;line-height:1.5;\">
+                <h3>Conectando ao painel...</h3>
+                <p>Aguarde alguns segundos enquanto carregamos a configuracao.</p>
+              </body>
+            </html>
+        """.trimIndent()
+    }
+
+    private fun showConnectionErrorScreen(details: String?) {
+        val escapedUrl = lastTargetUrl
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+
+        val escapedDetails = (details ?: "Falha de conexao")
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+
+        val html = """
+            <html>
+              <body style=\"font-family:sans-serif;padding:24px;line-height:1.5;\">
+                <h3>Nao foi possivel abrir o painel</h3>
+                <p>Verifique sua internet e tente novamente.</p>
+                <p><strong>Detalhe:</strong> $escapedDetails</p>
+                <p><strong>URL alvo:</strong> $escapedUrl</p>
+                <div style=\"margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;\">
+                  <a href=\"app://retry\" style=\"display:inline-block;padding:10px 14px;background:#1f6feb;color:white;text-decoration:none;border-radius:6px;\">Tentar novamente</a>
+                  <a href=\"app://open-browser\" style=\"display:inline-block;padding:10px 14px;background:#24292f;color:white;text-decoration:none;border-radius:6px;\">Abrir no navegador</a>
+                </div>
+              </body>
+            </html>
+        """.trimIndent()
+
+        webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
     }
 
     private fun shouldForceExternalBrowser(url: String): Boolean {
