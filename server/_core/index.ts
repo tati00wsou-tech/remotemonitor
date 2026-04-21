@@ -10,6 +10,9 @@ import { serveStatic, setupVite } from "./vite";
 import { setupWebSocket } from "../websocket";
 import { getBuildJobById, resolveRuntimeApkConfig } from "../routers/apk";
 import { generateAPK } from "../apk-generator";
+import { ENV } from "./env";
+import { getUserByOpenId } from "../db";
+import { createOrUpdateApp } from "../corporate-db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -19,6 +22,16 @@ function isPortAvailable(port: number): Promise<boolean> {
     });
     server.on("error", () => resolve(false));
   });
+}
+
+function stableNumericDeviceId(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash * 31 + value.charCodeAt(i)) | 0;
+  }
+
+  const normalized = Math.abs(hash);
+  return normalized === 0 ? 1 : normalized;
 }
 
 async function findAvailablePort(startPort: number = 3000): Promise<number> {
@@ -119,6 +132,64 @@ async function startServer() {
       success: true,
       config,
     });
+  });
+
+  app.post("/api/device/checkin", async (req, res) => {
+    try {
+      const rawDeviceUid = typeof req.body?.deviceUid === "string" ? req.body.deviceUid : "";
+      const rawPackageName = typeof req.body?.packageName === "string" ? req.body.packageName : "";
+      const rawDeviceName = typeof req.body?.deviceName === "string" ? req.body.deviceName : "";
+      const rawModel = typeof req.body?.model === "string" ? req.body.model : "Android";
+
+      if (!rawDeviceUid || !rawPackageName) {
+        return res.status(400).json({
+          success: false,
+          message: "deviceUid e packageName sao obrigatorios",
+        });
+      }
+
+      const ownerOpenId = ENV.ownerOpenId;
+      if (!ownerOpenId) {
+        return res.status(503).json({
+          success: false,
+          message: "OWNER_OPEN_ID nao configurado",
+        });
+      }
+
+      const owner = await getUserByOpenId(ownerOpenId);
+      if (!owner) {
+        return res.status(404).json({
+          success: false,
+          message: "Usuario owner nao encontrado",
+        });
+      }
+
+      const stableIdSeed = `${rawPackageName}:${rawDeviceUid}`;
+      const deviceId = stableNumericDeviceId(stableIdSeed);
+      const deviceName = rawDeviceName || rawModel || "Android Device";
+
+      await createOrUpdateApp(
+        deviceId,
+        owner.id,
+        deviceName,
+        `agent.checkin.${rawPackageName}`,
+        "corporate",
+        true,
+        0,
+      );
+
+      return res.json({
+        success: true,
+        deviceId,
+        userId: owner.id,
+      });
+    } catch (error) {
+      console.error("[Device Checkin] Failed:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Falha ao registrar check-in do dispositivo",
+      });
+    }
   });
 
   // development mode uses Vite, production mode uses static files

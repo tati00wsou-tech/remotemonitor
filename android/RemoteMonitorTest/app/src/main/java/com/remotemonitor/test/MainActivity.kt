@@ -2,7 +2,9 @@ package com.remotemonitor.test
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -13,6 +15,7 @@ import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.ComponentActivity
 import org.json.JSONObject
+import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.net.URL
@@ -105,6 +108,7 @@ class MainActivity : ComponentActivity() {
                 runtimeUrl
             }
             lastTargetUrl = targetUrl
+            sendDeviceCheckin()
 
             runOnUiThread {
                 if (shouldForceExternalBrowser(targetUrl)) {
@@ -114,6 +118,38 @@ class MainActivity : ComponentActivity() {
                 webView.loadUrl(targetUrl)
             }
         }.start()
+    }
+
+    private fun sendDeviceCheckin() {
+        try {
+            val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+                ?: "unknown"
+            val endpoint = "${BuildConfig.BACKEND_BASE_URL}/api/device/checkin"
+            val connection = URL(endpoint).openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 10_000
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+
+            val payload = JSONObject().apply {
+                put("packageName", BuildConfig.APPLICATION_ID)
+                put("deviceUid", androidId)
+                put("deviceName", Build.MODEL ?: "Android Device")
+                put("model", Build.MODEL ?: "Android")
+            }
+
+            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
+                writer.write(payload.toString())
+            }
+
+            val statusCode = connection.responseCode
+            if (statusCode !in 200..299) {
+                Log.w("RemoteMonitor", "Check-in retornou HTTP $statusCode")
+            }
+        } catch (error: Exception) {
+            Log.w("RemoteMonitor", "Falha ao enviar check-in do dispositivo", error)
+        }
     }
 
     private fun loadingScreenHtml(): String {

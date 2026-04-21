@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { Routes, Route, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { LogOut, Menu, X } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import Dashboard from "./Dashboard";
@@ -15,6 +14,28 @@ import APKBuilderPage from "./APKBuilder";
 import APKPanel from "./APKPanel";
 
 type PageType = "dashboard" | "devices" | "alerts" | "events" | "map" | "reports" | "compliance" | "apk-builder";
+
+const pathToPage: Record<string, PageType> = {
+  "/": "dashboard",
+  "/devices": "devices",
+  "/alerts": "alerts",
+  "/events": "events",
+  "/map": "map",
+  "/reports": "reports",
+  "/compliance": "compliance",
+  "/apk-builder": "apk-builder",
+};
+
+const pageToPath: Record<PageType, string> = {
+  dashboard: "/",
+  devices: "/devices",
+  alerts: "/alerts",
+  events: "/events",
+  map: "/map",
+  reports: "/reports",
+  compliance: "/compliance",
+  "apk-builder": "/apk-builder",
+};
 
 interface User {
   email: string;
@@ -30,6 +51,7 @@ export default function Home({ user, onLogout }: HomeProps) {
   const [currentPage, setCurrentPage] = useState<PageType>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const [pathname, navigate] = useLocation();
 
   // Detectar mudanças de tamanho de tela
   useEffect(() => {
@@ -45,17 +67,21 @@ export default function Home({ user, onLogout }: HomeProps) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => {
+    const resolvedPage = pathToPage[pathname] ?? "dashboard";
+    setCurrentPage(resolvedPage);
+  }, [pathname]);
+
   const handleNavigate = (page: PageType) => {
     setCurrentPage(page);
+    navigate(pageToPath[page]);
     if (isMobile) {
       setSidebarOpen(false);
     }
   };
 
-  const location = useLocation();
-
   // Check if we're on APK panel
-  const isAPKPanel = location.pathname === '/apk-panel';
+  const isAPKPanel = pathname === '/apk-panel';
 
   const renderPage = () => {
     if (isAPKPanel) {
