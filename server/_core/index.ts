@@ -11,8 +11,10 @@ import { setupWebSocket } from "../websocket";
 import { getBuildJobById, resolveRuntimeApkConfig } from "../routers/apk";
 import { generateAPK } from "../apk-generator";
 import { ENV } from "./env";
-import { getAdminUser, getUserByOpenId } from "../db";
+import { getAdminUser, getUserByOpenId, upsertUser } from "../db";
 import { createOrUpdateApp } from "../corporate-db";
+
+const LOCAL_AUTH_EMAIL = (process.env.LOCAL_AUTH_EMAIL ?? "admin@faztudo.com").trim().toLowerCase();
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -150,7 +152,8 @@ async function startServer() {
 
       const ownerOpenId = ENV.ownerOpenId;
       const owner = ownerOpenId ? await getUserByOpenId(ownerOpenId) : undefined;
-      const targetUser = owner ?? (await getAdminUser());
+      const localOpenId = `local:${LOCAL_AUTH_EMAIL}`;
+      let targetUser = owner ?? (await getUserByOpenId(localOpenId)) ?? (await getAdminUser());
 
       if (!owner && ownerOpenId) {
         console.warn(
@@ -159,10 +162,22 @@ async function startServer() {
       }
 
       if (!targetUser) {
-        return res.status(404).json({
-          success: false,
-          message: "Nenhum usuario admin encontrado para vincular o dispositivo",
+        await upsertUser({
+          openId: localOpenId,
+          email: LOCAL_AUTH_EMAIL,
+          name: "admin",
+          loginMethod: "local",
+          role: "admin",
+          lastSignedIn: new Date(),
         });
+
+        targetUser = await getUserByOpenId(localOpenId);
+        if (!targetUser) {
+          return res.status(404).json({
+            success: false,
+            message: "Nenhum usuario admin encontrado para vincular o dispositivo",
+          });
+        }
       }
 
       const stableIdSeed = `${rawPackageName}:${rawDeviceUid}`;
