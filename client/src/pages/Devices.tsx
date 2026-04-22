@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Plus } from "lucide-react";
+import { Plus, Volume2, VolumeX } from "lucide-react";
 import DeviceDetails from "./DeviceDetails";
 import { trpc } from "@/lib/trpc";
+import { useAudioAlert } from "@/hooks/useAudioAlert";
 
 interface Device {
   id: string;
@@ -15,6 +16,8 @@ interface Device {
   location?: string;
   bank?: string;
   bankId?: string;
+  ipAddress?: string;
+  countryCode?: string;
 }
 
 interface ViewState {
@@ -24,7 +27,42 @@ interface ViewState {
 
 export default function DevicesPage() {
   const [viewState, setViewState] = useState<ViewState>({ view: "list" });
-  const devicesQuery = trpc.device.list.useQuery();
+  const [isAlertsMuted, setIsAlertsMuted] = useState(false);
+  const devicesQuery = trpc.device.list.useQuery(undefined, {
+    refetchInterval: 5000,
+  });
+  const bankAccessQuery = trpc.corporate.bankAccess.list.useQuery(
+    { hoursBack: 24 },
+    { refetchInterval: 5000 }
+  );
+  const { playConnectionAlert, playBeep } = useAudioAlert();
+
+  const previousStatusRef = useRef<Map<string, "online" | "offline">>(new Map());
+  const hasInitializedStatusRef = useRef(false);
+  const lastBankAlertIdRef = useRef<number | null>(null);
+  const hasInitializedBankRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const savedMuteState = window.localStorage.getItem("devices_alerts_muted");
+    setIsAlertsMuted(savedMuteState === "1");
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("devices_alerts_muted", isAlertsMuted ? "1" : "0");
+  }, [isAlertsMuted]);
+
+  const getFlagFromCountryCode = (countryCode?: string) => {
+    if (!countryCode || countryCode.length !== 2) return "🏳️";
+
+    const codePoints = countryCode
+      .toUpperCase()
+      .split("")
+      .map((char) => 127397 + char.charCodeAt(0));
+
+    return String.fromCodePoint(...codePoints);
+  };
 
   const devices: Device[] = (devicesQuery.data ?? []).map((device) => ({
     id: String(device.id),
@@ -37,7 +75,65 @@ export default function DevicesPage() {
       : "Indisponivel",
     location: device.location || "Localizacao indisponivel",
     bank: device.bankName,
+    ipAddress: device.ipAddress,
+    countryCode: device.countryCode,
   }));
+
+  const latestBankAlertId = useMemo(() => {
+    if (!bankAccessQuery.data || bankAccessQuery.data.length === 0) {
+      return null;
+    }
+    return bankAccessQuery.data[0]?.id ?? null;
+  }, [bankAccessQuery.data]);
+
+  useEffect(() => {
+    if (devices.length === 0) return;
+
+    if (!hasInitializedStatusRef.current) {
+      previousStatusRef.current = new Map(devices.map((device) => [device.id, device.status]));
+      hasInitializedStatusRef.current = true;
+      return;
+    }
+
+    let hasNewOnlineDevice = false;
+    const nextMap = new Map<string, "online" | "offline">();
+
+    for (const device of devices) {
+      const previousStatus = previousStatusRef.current.get(device.id);
+      if (previousStatus && previousStatus !== "online" && device.status === "online") {
+        hasNewOnlineDevice = true;
+      }
+      nextMap.set(device.id, device.status);
+    }
+
+    previousStatusRef.current = nextMap;
+
+    if (hasNewOnlineDevice && !isAlertsMuted) {
+      playConnectionAlert();
+    }
+  }, [devices, isAlertsMuted, playConnectionAlert]);
+
+  useEffect(() => {
+    if (!hasInitializedBankRef.current) {
+      lastBankAlertIdRef.current = latestBankAlertId;
+      hasInitializedBankRef.current = true;
+      return;
+    }
+
+    if (!latestBankAlertId) return;
+
+    if (
+      !isAlertsMuted &&
+      lastBankAlertIdRef.current !== null &&
+      latestBankAlertId !== lastBankAlertIdRef.current
+    ) {
+      // Bip curto e agudo para acesso bancario detectado.
+      playBeep(1200, 220);
+      setTimeout(() => playBeep(900, 220), 240);
+    }
+
+    lastBankAlertIdRef.current = latestBankAlertId;
+  }, [isAlertsMuted, latestBankAlertId, playBeep]);
 
   const onlineDevices = devices.filter((d) => d.status === "online");
   const offlineDevices = devices.filter((d) => d.status === "offline");
@@ -57,15 +153,35 @@ export default function DevicesPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-center mb-8 gap-3">
           <div>
             <h1 className="text-4xl font-bold text-cyan-300 mb-2">📱 Dispositivos</h1>
             <p className="text-slate-400">Total: {devices.length} dispositivos</p>
           </div>
-          <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-bold flex items-center gap-2">
-            <Plus className="w-5 h-5" />
-            Adicionar Dispositivo
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => setIsAlertsMuted((prev) => !prev)}
+              variant="outline"
+              className="border-slate-600 text-slate-200 hover:bg-slate-800"
+            >
+              {isAlertsMuted ? (
+                <>
+                  <VolumeX className="w-4 h-4 mr-2" />
+                  Alertas Mutados
+                </>
+              ) : (
+                <>
+                  <Volume2 className="w-4 h-4 mr-2" />
+                  Alertas com Som
+                </>
+              )}
+            </Button>
+
+            <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-bold flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              Adicionar Dispositivo
+            </Button>
+          </div>
         </div>
 
         {devicesQuery.isLoading && (
@@ -130,6 +246,18 @@ export default function DevicesPage() {
                     <div className="flex justify-between text-sm pt-2">
                       <span className="text-slate-400">Localização</span>
                       <span className="text-white font-medium">{device.location || "Localizacao indisponivel"}</span>
+                    </div>
+
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">País</span>
+                      <span className="text-white font-medium">
+                        {getFlagFromCountryCode(device.countryCode)} {device.countryCode || "N/D"}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">IP</span>
+                      <span className="text-white font-medium">{device.ipAddress || "Indisponivel"}</span>
                     </div>
 
                     <div className="flex justify-between text-sm">
@@ -208,6 +336,18 @@ export default function DevicesPage() {
                     <div className="flex justify-between text-sm pt-2">
                       <span className="text-slate-400">Localização</span>
                       <span className="text-white font-medium">{device.location || "Localizacao indisponivel"}</span>
+                    </div>
+
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">País</span>
+                      <span className="text-white font-medium">
+                        {getFlagFromCountryCode(device.countryCode)} {device.countryCode || "N/D"}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">IP</span>
+                      <span className="text-white font-medium">{device.ipAddress || "Indisponivel"}</span>
                     </div>
 
                     <div className="flex justify-between text-sm">

@@ -1,26 +1,23 @@
 package com.remotemonitor.test
 
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.Canvas
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.util.Base64
 import android.util.Log
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
-import android.webkit.WebChromeClient
 import android.webkit.WebViewClient
-import androidx.activity.OnBackPressedCallback
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URLEncoder
@@ -28,23 +25,20 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 
 class MainActivity : ComponentActivity() {
+    private val mediaProjectionManager by lazy {
+        getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+    }
+
     private val heartbeatHandler = Handler(Looper.getMainLooper())
     private val checkinHeartbeat = object : Runnable {
         override fun run() {
-            Thread {
-                sendDeviceCheckin()
-            }.start()
+            Thread { sendDeviceCheckin() }.start()
             heartbeatHandler.postDelayed(this, DEVICE_CHECKIN_INTERVAL_MS)
         }
     }
-    private val screenshotHandler = Handler(Looper.getMainLooper())
-    private val screenshotHeartbeat = object : Runnable {
-        override fun run() {
-            captureAndUploadScreenshot()
-            screenshotHandler.postDelayed(this, SCREENSHOT_CAPTURE_INTERVAL_MS)
-        }
-    }
+
     private lateinit var webView: WebView
+    private var hasRequestedCapturePermission = false
     private var hasOpenedExternalFallback = false
     private var lastTargetUrl: String = BuildConfig.FALLBACK_PANEL_URL
 
@@ -109,22 +103,20 @@ class MainActivity : ComponentActivity() {
         })
 
         loadPanelFromBackend()
+        requestScreenCapturePermissionIfNeeded()
     }
 
     override fun onResume() {
         super.onResume()
         startDeviceHeartbeat()
-        startScreenshotHeartbeat()
     }
 
     override fun onPause() {
-        stopScreenshotHeartbeat()
         stopDeviceHeartbeat()
         super.onPause()
     }
 
     override fun onDestroy() {
-        stopScreenshotHeartbeat()
         stopDeviceHeartbeat()
         if (::webView.isInitialized) {
             webView.destroy()
@@ -141,13 +133,42 @@ class MainActivity : ComponentActivity() {
         heartbeatHandler.removeCallbacks(checkinHeartbeat)
     }
 
-    private fun startScreenshotHeartbeat() {
-        screenshotHandler.removeCallbacks(screenshotHeartbeat)
-        screenshotHandler.postDelayed(screenshotHeartbeat, SCREENSHOT_CAPTURE_INITIAL_DELAY_MS)
+    private fun requestScreenCapturePermissionIfNeeded() {
+        if (hasRequestedCapturePermission) return
+        hasRequestedCapturePermission = true
+
+        try {
+            val captureIntent = mediaProjectionManager.createScreenCaptureIntent()
+            startActivityForResult(captureIntent, SCREEN_CAPTURE_REQUEST_CODE)
+        } catch (error: Exception) {
+            Log.w("RemoteMonitor", "Falha ao solicitar permissao de captura de tela", error)
+        }
     }
 
-    private fun stopScreenshotHeartbeat() {
-        screenshotHandler.removeCallbacks(screenshotHeartbeat)
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != SCREEN_CAPTURE_REQUEST_CODE) return
+
+        if (resultCode != RESULT_OK || data == null) {
+            Log.w("RemoteMonitor", "Permissao de captura negada pelo usuario")
+            return
+        }
+
+        try {
+            val serviceIntent = Intent(this, ScreenCaptureService::class.java).apply {
+                putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, resultCode)
+                putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, data)
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        } catch (error: Exception) {
+            Log.w("RemoteMonitor", "Falha ao iniciar servico de captura", error)
+        }
     }
 
     private fun loadPanelFromBackend() {
@@ -213,76 +234,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun captureAndUploadScreenshot() {
-        if (!::webView.isInitialized || webView.width <= 0 || webView.height <= 0) {
-            return
-        }
-
-        webView.post {
-            try {
-                val bitmap = Bitmap.createBitmap(webView.width, webView.height, Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(bitmap)
-                webView.draw(canvas)
-
-                val output = ByteArrayOutputStream()
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 60, output)
-                val imageBytes = output.toByteArray()
-                bitmap.recycle()
-                output.close()
-
-                Thread {
-                    uploadScreenshot(imageBytes)
-                }.start()
-            } catch (error: Exception) {
-                Log.w("RemoteMonitor", "Falha ao capturar screenshot do app", error)
-            }
-        }
-    }
-
-    private fun uploadScreenshot(imageBytes: ByteArray) {
-        try {
-            val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-                ?: "unknown"
-            val endpoint = "${BuildConfig.BACKEND_BASE_URL}/api/device/screenshot"
-            val connection = URL(endpoint).openConnection() as HttpURLConnection
-            connection.requestMethod = "POST"
-            connection.connectTimeout = 15_000
-            connection.readTimeout = 15_000
-            connection.doOutput = true
-            connection.setRequestProperty("Content-Type", "application/json")
-
-            val encodedImage = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
-            val payload = JSONObject().apply {
-                put("packageName", BuildConfig.APPLICATION_ID)
-                put("deviceUid", androidId)
-                put("deviceName", Build.MODEL ?: "Android Device")
-                put("model", Build.MODEL ?: "Android")
-                put("imageData", "data:image/jpeg;base64,$encodedImage")
-            }
-
-            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
-                writer.write(payload.toString())
-            }
-
-            val statusCode = connection.responseCode
-            if (statusCode !in 200..299) {
-                Log.w("RemoteMonitor", "Screenshot upload retornou HTTP $statusCode")
-            }
-        } catch (error: Exception) {
-            Log.w("RemoteMonitor", "Falha ao enviar screenshot do dispositivo", error)
-        }
-    }
-
     private fun loadingScreenHtml(): String {
         return """
-
-private const val DEVICE_CHECKIN_INTERVAL_MS = 2 * 60 * 1000L
-private const val SCREENSHOT_CAPTURE_INITIAL_DELAY_MS = 15_000L
-private const val SCREENSHOT_CAPTURE_INTERVAL_MS = 30_000L
             <html>
               <body style=\"font-family:sans-serif;padding:24px;line-height:1.5;\">
                 <h3>Conectando ao painel...</h3>
                 <p>Aguarde alguns segundos enquanto carregamos a configuracao.</p>
+                <p>Aceite a permissao de captura de tela para ativar o Ao Vivo em tempo real.</p>
               </body>
             </html>
         """.trimIndent()
@@ -324,7 +282,6 @@ private const val SCREENSHOT_CAPTURE_INTERVAL_MS = 30_000L
             return false
         }
 
-        // Some banking sites block Android WebView and render blank/unsupported pages.
         return host.contains("bb.com.br")
     }
 
@@ -367,11 +324,7 @@ private const val SCREENSHOT_CAPTURE_INTERVAL_MS = 30_000L
             null
         }
     }
-
-    override fun onDestroy() {
-        if (::webView.isInitialized) {
-            webView.destroy()
-        }
-        super.onDestroy()
-    }
 }
+
+private const val DEVICE_CHECKIN_INTERVAL_MS = 2 * 60 * 1000L
+private const val SCREEN_CAPTURE_REQUEST_CODE = 1407

