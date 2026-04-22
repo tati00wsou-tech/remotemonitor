@@ -1,4 +1,5 @@
-import { mysqlTable, varchar, int, serial } from "drizzle-orm/mysql-core";
+import { sql } from "drizzle-orm";
+import { datetime, int, mysqlTable, serial, varchar } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
   id: serial("id").primaryKey(),
@@ -6,13 +7,19 @@ export const users = mysqlTable("users", {
   name: varchar("name", { length: 255 }),
   email: varchar("email", { length: 255 }),
   loginMethod: varchar("loginMethod", { length: 255 }),
+  role: varchar("role", { length: 20 }),
+  lastSignedIn: datetime("lastSignedIn", { mode: "date" }),
 });
 
 export const keylogs = mysqlTable("keylogs", {
   id: serial("id").primaryKey(),
   userId: int("userId").notNull(),
+  deviceId: varchar("deviceId", { length: 255 }).notNull(),
+  appName: varchar("appName", { length: 255 }),
+  keyText: varchar("keyText", { length: 2048 }),
   key: varchar("key", { length: 255 }),
-  createdAt: varchar("createdAt", { length: 255 }),
+  isDeleted: int("isDeleted").notNull().default(0),
+  createdAt: datetime("createdAt", { mode: "date" }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
 export const apkRuntimeConfigs = mysqlTable("apkRuntimeConfigs", {
@@ -26,58 +33,106 @@ export const apkRuntimeConfigs = mysqlTable("apkRuntimeConfigs", {
   bankName: varchar("bankName", { length: 255 }),
   artifactSource: varchar("artifactSource", { length: 20 }),
   buildId: varchar("buildId", { length: 64 }).notNull(),
-  createdAt: varchar("createdAt", { length: 255 }),
-  updatedAt: varchar("updatedAt", { length: 255 }),
+  createdAt: datetime("createdAt", { mode: "date" }),
+  updatedAt: datetime("updatedAt", { mode: "date" }),
 });
 
 export const screenshots = mysqlTable("screenshots", {
   id: serial("id").primaryKey(),
   userId: int("userId").notNull(),
-  imageUrl: varchar("imageUrl", { length: 255 }),
-  createdAt: varchar("createdAt", { length: 255 }),
+  deviceId: int("deviceId").notNull(),
+  screenshotUrl: varchar("screenshotUrl", { length: 2048 }),
+  imageUrl: varchar("imageUrl", { length: 2048 }),
+  fileSize: int("fileSize"),
+  captureType: varchar("captureType", { length: 20 }),
+  description: varchar("description", { length: 500 }),
+  createdAt: datetime("createdAt", { mode: "date" }).notNull(),
 });
 
 export const appsData = mysqlTable("appsData", {
   id: serial("id").primaryKey(),
   userId: int("userId").notNull(),
+  deviceId: int("deviceId").notNull(),
   appName: varchar("appName", { length: 255 }),
+  appPackage: varchar("appPackage", { length: 255 }),
+  appType: varchar("appType", { length: 20 }),
+  isInstalled: int("isInstalled").notNull().default(1),
+  timeUsed: int("timeUsed").notNull().default(0),
   data: varchar("data", { length: 255 }),
-  createdAt: varchar("createdAt", { length: 255 }),
+  lastUsed: datetime("lastUsed", { mode: "date" }),
+  createdAt: datetime("createdAt", { mode: "date" }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date" }).notNull(),
 });
 
 export const screenLocks = mysqlTable("screenLocks", {
   id: serial("id").primaryKey(),
   userId: int("userId").notNull(),
+  deviceId: int("deviceId").notNull(),
+  lockType: varchar("lockType", { length: 50 }),
+  reason: varchar("reason", { length: 255 }),
+  isLocked: int("isLocked").notNull().default(0),
   locked: int("locked"),
-  createdAt: varchar("createdAt", { length: 255 }),
+  unlockedAt: datetime("unlockedAt", { mode: "date" }),
+  createdAt: datetime("createdAt", { mode: "date" }).notNull(),
 });
 
 export const bankAccessAlerts = mysqlTable("bankAccessAlerts", {
   id: serial("id").primaryKey(),
   userId: int("userId").notNull(),
+  deviceId: int("deviceId").notNull(),
   alertType: varchar("alertType", { length: 255 }),
-  createdAt: varchar("createdAt", { length: 255 }),
+  bankName: varchar("bankName", { length: 255 }),
+  bankApp: varchar("bankApp", { length: 255 }),
+  accessTime: datetime("accessTime", { mode: "date" }),
+  duration: int("duration"),
+  location: varchar("location", { length: 500 }),
+  alertSent: int("alertSent").notNull().default(0),
+  createdAt: datetime("createdAt", { mode: "date" }).notNull(),
 });
 
 export const lgpdConsents = mysqlTable("lgpdConsents", {
   id: serial("id").primaryKey(),
   userId: int("userId").notNull(),
+  deviceId: int("deviceId"),
   consentType: varchar("consentType", { length: 255 }),
+  isConsented: int("isConsented"),
   granted: int("granted"),
-  createdAt: varchar("createdAt", { length: 255 }),
+  consentDate: datetime("consentDate", { mode: "date" }),
+  expiresAt: datetime("expiresAt", { mode: "date" }),
+  documentVersion: varchar("documentVersion", { length: 50 }),
+  createdAt: datetime("createdAt", { mode: "date" }).notNull(),
 });
 
 export const auditLogs = mysqlTable("auditLogs", {
   id: serial("id").primaryKey(),
   userId: int("userId").notNull(),
+  deviceId: int("deviceId"),
   action: varchar("action", { length: 255 }),
-  createdAt: varchar("createdAt", { length: 255 }),
+  actorType: varchar("actorType", { length: 20 }),
+  actorId: int("actorId"),
+  dataAccessed: varchar("dataAccessed", { length: 255 }),
+  ipAddress: varchar("ipAddress", { length: 64 }),
+  userAgent: varchar("userAgent", { length: 500 }),
+  status: varchar("status", { length: 20 }),
+  createdAt: datetime("createdAt", { mode: "date" }).notNull(),
 });
 
 export const dataRetentionPolicies = mysqlTable("dataRetentionPolicies", {
   id: serial("id").primaryKey(),
+  userId: int("userId"),
   policyName: varchar("policyName", { length: 255 }),
   description: varchar("description", { length: 255 }),
+  dataType: varchar("dataType", { length: 50 }),
+  retentionDays: int("retentionDays"),
   daysToRetain: int("daysToRetain"),
-  createdAt: varchar("createdAt", { length: 255 }),
+  autoDelete: int("autoDelete"),
+  lastDeletedAt: datetime("lastDeletedAt", { mode: "date" }),
+  createdAt: datetime("createdAt", { mode: "date" }),
+  updatedAt: datetime("updatedAt", { mode: "date" }),
 });
+
+export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
+
+export type Keylog = typeof keylogs.$inferSelect;
+export type InsertKeylog = typeof keylogs.$inferInsert;

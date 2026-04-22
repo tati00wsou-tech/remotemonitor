@@ -36,6 +36,13 @@
       "when": 1776809916991,
       "tag": "0004_redundant_magneto",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1776853678512,
+      "tag": "0005_regular_spacker_dave",
+      "breakpoints": true
     }
   ]
 }

@@ -11,7 +11,7 @@ export interface PersistedRuntimeApkConfig {
   bankId?: string;
   bankCountry?: string;
   bankName?: string;
-  artifactSource?: string;
+  artifactSource?: "eas" | "storage" | "local" | "github";
   createdAt: string;
   updatedAt: string;
 }
@@ -47,6 +47,14 @@ async function ensureRuntimeConfigTable() {
 }
 
 function toPersistedConfig(row: typeof apkRuntimeConfigs.$inferSelect): PersistedRuntimeApkConfig {
+  const artifactSource =
+    row.artifactSource === "eas" ||
+    row.artifactSource === "storage" ||
+    row.artifactSource === "local" ||
+    row.artifactSource === "github"
+      ? row.artifactSource
+      : undefined;
+
   const normalizeDate = (value: string | Date | null | undefined): string => {
     if (!value) return new Date().toISOString();
     if (value instanceof Date) return value.toISOString();
@@ -64,7 +72,7 @@ function toPersistedConfig(row: typeof apkRuntimeConfigs.$inferSelect): Persiste
     bankId: row.bankId ?? undefined,
     bankCountry: row.bankCountry ?? undefined,
     bankName: row.bankName ?? undefined,
-    artifactSource: row.artifactSource ?? undefined,
+    artifactSource,
     createdAt: normalizeDate(row.createdAt),
     updatedAt: normalizeDate(row.updatedAt),
   };
@@ -110,7 +118,7 @@ export async function saveRuntimeApkConfig(config: {
       bankCountry: values.bankCountry,
       bankName: values.bankName,
       artifactSource: values.artifactSource,
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     },
   });
 }
