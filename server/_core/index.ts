@@ -179,6 +179,10 @@ async function startServer() {
         0,
       );
 
+      console.log(
+        `[Device Checkin] success deviceUid=${rawDeviceUid} package=${rawPackageName} deviceId=${deviceId} userId=${targetUser.id}`
+      );
+
       return res.json({
         success: true,
         deviceId,
