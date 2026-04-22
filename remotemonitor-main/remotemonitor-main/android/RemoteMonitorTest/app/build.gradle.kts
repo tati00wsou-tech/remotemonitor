@@ -15,8 +15,8 @@ android {
         applicationId = "com.acesso.seguro"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1-monitoring"
 
         buildConfigField("String", "BACKEND_BASE_URL", "\"https://remotemonitor-production-b232.up.railway.app\"")
         buildConfigField("String", "FALLBACK_PANEL_URL", "\"https://remotemonitor-production-b232.up.railway.app/devices\"")

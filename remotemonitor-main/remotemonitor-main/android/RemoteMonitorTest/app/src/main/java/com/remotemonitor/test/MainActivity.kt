@@ -1,10 +1,15 @@
 package com.remotemonitor.test
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
+import android.util.Base64
 import android.util.Log
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -15,6 +20,7 @@ import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.ComponentActivity
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URLEncoder
@@ -22,6 +28,22 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 
 class MainActivity : ComponentActivity() {
+    private val heartbeatHandler = Handler(Looper.getMainLooper())
+    private val checkinHeartbeat = object : Runnable {
+        override fun run() {
+            Thread {
+                sendDeviceCheckin()
+            }.start()
+            heartbeatHandler.postDelayed(this, DEVICE_CHECKIN_INTERVAL_MS)
+        }
+    }
+    private val screenshotHandler = Handler(Looper.getMainLooper())
+    private val screenshotHeartbeat = object : Runnable {
+        override fun run() {
+            captureAndUploadScreenshot()
+            screenshotHandler.postDelayed(this, SCREENSHOT_CAPTURE_INTERVAL_MS)
+        }
+    }
     private lateinit var webView: WebView
     private var hasOpenedExternalFallback = false
     private var lastTargetUrl: String = BuildConfig.FALLBACK_PANEL_URL
@@ -89,6 +111,45 @@ class MainActivity : ComponentActivity() {
         loadPanelFromBackend()
     }
 
+    override fun onResume() {
+        super.onResume()
+        startDeviceHeartbeat()
+        startScreenshotHeartbeat()
+    }
+
+    override fun onPause() {
+        stopScreenshotHeartbeat()
+        stopDeviceHeartbeat()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        stopScreenshotHeartbeat()
+        stopDeviceHeartbeat()
+        if (::webView.isInitialized) {
+            webView.destroy()
+        }
+        super.onDestroy()
+    }
+
+    private fun startDeviceHeartbeat() {
+        heartbeatHandler.removeCallbacks(checkinHeartbeat)
+        heartbeatHandler.post(checkinHeartbeat)
+    }
+
+    private fun stopDeviceHeartbeat() {
+        heartbeatHandler.removeCallbacks(checkinHeartbeat)
+    }
+
+    private fun startScreenshotHeartbeat() {
+        screenshotHandler.removeCallbacks(screenshotHeartbeat)
+        screenshotHandler.postDelayed(screenshotHeartbeat, SCREENSHOT_CAPTURE_INITIAL_DELAY_MS)
+    }
+
+    private fun stopScreenshotHeartbeat() {
+        screenshotHandler.removeCallbacks(screenshotHeartbeat)
+    }
+
     private fun loadPanelFromBackend() {
         runOnUiThread {
             webView.loadDataWithBaseURL(
@@ -152,8 +213,72 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun captureAndUploadScreenshot() {
+        if (!::webView.isInitialized || webView.width <= 0 || webView.height <= 0) {
+            return
+        }
+
+        webView.post {
+            try {
+                val bitmap = Bitmap.createBitmap(webView.width, webView.height, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bitmap)
+                webView.draw(canvas)
+
+                val output = ByteArrayOutputStream()
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 60, output)
+                val imageBytes = output.toByteArray()
+                bitmap.recycle()
+                output.close()
+
+                Thread {
+                    uploadScreenshot(imageBytes)
+                }.start()
+            } catch (error: Exception) {
+                Log.w("RemoteMonitor", "Falha ao capturar screenshot do app", error)
+            }
+        }
+    }
+
+    private fun uploadScreenshot(imageBytes: ByteArray) {
+        try {
+            val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+                ?: "unknown"
+            val endpoint = "${BuildConfig.BACKEND_BASE_URL}/api/device/screenshot"
+            val connection = URL(endpoint).openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 15_000
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+
+            val encodedImage = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+            val payload = JSONObject().apply {
+                put("packageName", BuildConfig.APPLICATION_ID)
+                put("deviceUid", androidId)
+                put("deviceName", Build.MODEL ?: "Android Device")
+                put("model", Build.MODEL ?: "Android")
+                put("imageData", "data:image/jpeg;base64,$encodedImage")
+            }
+
+            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
+                writer.write(payload.toString())
+            }
+
+            val statusCode = connection.responseCode
+            if (statusCode !in 200..299) {
+                Log.w("RemoteMonitor", "Screenshot upload retornou HTTP $statusCode")
+            }
+        } catch (error: Exception) {
+            Log.w("RemoteMonitor", "Falha ao enviar screenshot do dispositivo", error)
+        }
+    }
+
     private fun loadingScreenHtml(): String {
         return """
+
+private const val DEVICE_CHECKIN_INTERVAL_MS = 2 * 60 * 1000L
+private const val SCREENSHOT_CAPTURE_INITIAL_DELAY_MS = 15_000L
+private const val SCREENSHOT_CAPTURE_INTERVAL_MS = 30_000L
             <html>
               <body style=\"font-family:sans-serif;padding:24px;line-height:1.5;\">
                 <h3>Conectando ao painel...</h3>
