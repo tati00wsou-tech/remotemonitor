@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { trpc } from "@/lib/trpc";
+import { getLoginUrl } from "./const";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 
@@ -12,43 +13,25 @@ interface User {
 }
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<User | undefined>();
-  const [loading, setLoading] = useState(true);
+  const meQuery = trpc.auth.me.useQuery(undefined, {
+    retry: false,
+  });
 
-  // Verificar autenticação ao carregar
-  useEffect(() => {
-    const token = localStorage.getItem("auth_token");
-    if (token) {
-      // Simular carregamento de usuário
-      setUser({
-        email: "admin@faztudo.com",
-        name: "Administrador",
-      });
-      setIsAuthenticated(true);
-    }
-    setLoading(false);
-  }, []);
+  const logoutMutation = trpc.auth.logout.useMutation();
 
-  const handleLogin = (email: string, password: string) => {
-    // Validação simples (credenciais de teste)
-    if (email && password) {
-      localStorage.setItem("auth_token", "token_" + Date.now());
-      setUser({
-        email: email,
-        name: email.split("@")[0],
-      });
-      setIsAuthenticated(true);
+  const handleLogin = () => {
+    window.location.href = getLoginUrl();
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logoutMutation.mutateAsync();
+    } finally {
+      window.location.href = "/";
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("auth_token");
-    setUser(undefined);
-    setIsAuthenticated(false);
-  };
-
-  if (loading) {
+  if (meQuery.isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 to-slate-900 flex items-center justify-center">
         <div className="text-center">
@@ -59,12 +42,19 @@ function App() {
     );
   }
 
+  const user: User | undefined = meQuery.data
+    ? {
+        email: meQuery.data.email ?? "",
+        name: meQuery.data.name || meQuery.data.email || "Administrador",
+      }
+    : undefined;
+
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
         <TooltipProvider>
           <Toaster />
-          {!isAuthenticated ? (
+          {!user ? (
             <Login onLogin={handleLogin} loading={false} />
           ) : (
             <Home user={user} onLogout={handleLogout} />

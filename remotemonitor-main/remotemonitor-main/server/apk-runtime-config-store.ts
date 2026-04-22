@@ -47,6 +47,14 @@ async function ensureRuntimeConfigTable() {
 }
 
 function toPersistedConfig(row: typeof apkRuntimeConfigs.$inferSelect): PersistedRuntimeApkConfig {
+  const normalizeDate = (value: string | Date | null | undefined): string => {
+    if (!value) return new Date().toISOString();
+    if (value instanceof Date) return value.toISOString();
+
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+  };
+
   return {
     buildId: row.buildId,
     panelUrl: row.panelUrl,
@@ -57,8 +65,8 @@ function toPersistedConfig(row: typeof apkRuntimeConfigs.$inferSelect): Persiste
     bankCountry: row.bankCountry ?? undefined,
     bankName: row.bankName ?? undefined,
     artifactSource: row.artifactSource ?? undefined,
-    createdAt: row.createdAt ? row.createdAt.toISOString() : new Date().toISOString(),
-    updatedAt: row.updatedAt ? row.updatedAt.toISOString() : new Date().toISOString(),
+    createdAt: normalizeDate(row.createdAt),
+    updatedAt: normalizeDate(row.updatedAt),
   };
 }
 
@@ -102,7 +110,7 @@ export async function saveRuntimeApkConfig(config: {
       bankCountry: values.bankCountry,
       bankName: values.bankName,
       artifactSource: values.artifactSource,
-      updatedAt: new Date(),
+      updatedAt: new Date().toISOString(),
     },
   });
 }
