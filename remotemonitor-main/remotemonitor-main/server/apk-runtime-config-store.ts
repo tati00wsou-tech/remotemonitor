@@ -57,8 +57,8 @@ function toPersistedConfig(row: typeof apkRuntimeConfigs.$inferSelect): Persiste
     bankCountry: row.bankCountry ?? undefined,
     bankName: row.bankName ?? undefined,
     artifactSource: row.artifactSource ?? undefined,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    createdAt: row.createdAt ? row.createdAt.toISOString() : new Date().toISOString(),
+    updatedAt: row.updatedAt ? row.updatedAt.toISOString() : new Date().toISOString(),
   };
 }
 
