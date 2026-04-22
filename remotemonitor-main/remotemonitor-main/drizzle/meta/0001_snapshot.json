@@ -1,128 +1,39 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "4e063653-b111-4643-b722-daf1500fd7a9",
-  "prevId": "783543c4-7b2e-4746-aa7b-264c6fda7648",
+  "id": "0d19a307-9155-4280-8dd2-eb18b260e9fa",
+  "prevId": "85618b21-3788-4218-b343-a0f52db4bf9d",
   "tables": {
-    "alertConfigs": {
-      "name": "alertConfigs",
+    "apkRuntimeConfigs": {
+      "name": "apkRuntimeConfigs",
       "columns": {
         "id": {
           "name": "id",
-          "type": "int",
+          "type": "serial",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
-        "userId": {
-          "name": "userId",
-          "type": "int",
+        "configKey": {
+          "name": "configKey",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "deviceId": {
-          "name": "deviceId",
-          "type": "int",
+        "configValue": {
+          "name": "configValue",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "alertType": {
-          "name": "alertType",
-          "type": "enum('offline','location_change','critical_event','battery_low','custom')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "isEnabled": {
-          "name": "isEnabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
-        },
-        "notificationMethod": {
-          "name": "notificationMethod",
-          "type": "enum('email','push','both')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'email'"
-        },
-        "threshold": {
-          "name": "threshold",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
         }
       },
-      "indexes": {
-        "alertConfigs_userId_idx": {
-          "name": "alertConfigs_userId_idx",
-          "columns": [
-            "userId"
-          ],
-          "isUnique": false
-        },
-        "alertConfigs_deviceId_idx": {
-          "name": "alertConfigs_deviceId_idx",
-          "columns": [
-            "deviceId"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "alertConfigs_userId_users_id_fk": {
-          "name": "alertConfigs_userId_users_id_fk",
-          "tableFrom": "alertConfigs",
-          "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "alertConfigs_deviceId_devices_id_fk": {
-          "name": "alertConfigs_deviceId_devices_id_fk",
-          "tableFrom": "alertConfigs",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "deviceId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {
-        "alertConfigs_id": {
-          "name": "alertConfigs_id",
+        "apkRuntimeConfigs_id": {
+          "name": "apkRuntimeConfigs_id",
           "columns": [
             "id"
           ]
@@ -131,12 +42,12 @@
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
-    "alerts": {
-      "name": "alerts",
+    "appsData": {
+      "name": "appsData",
       "columns": {
         "id": {
           "name": "id",
-          "type": "int",
+          "type": "serial",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -148,8 +59,53 @@
           "notNull": true,
           "autoincrement": false
         },
-        "deviceId": {
-          "name": "deviceId",
+        "appName": {
+          "name": "appName",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "data": {
+          "name": "data",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "appsData_id": {
+          "name": "appsData_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "bankAccessAlerts": {
+      "name": "bankAccessAlerts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "userId": {
+          "name": "userId",
           "type": "int",
           "primaryKey": false,
           "notNull": true,
@@ -157,112 +113,24 @@
         },
         "alertType": {
           "name": "alertType",
-          "type": "enum('offline','location_change','critical_event','battery_low','custom')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "title": {
-          "name": "title",
           "type": "varchar(255)",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
-        },
-        "message": {
-          "name": "message",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "isRead": {
-          "name": "isRead",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "emailSent": {
-          "name": "emailSent",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "pushSent": {
-          "name": "pushSent",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "varchar(255)",
           "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
+          "notNull": false,
+          "autoincrement": false
         }
       },
-      "indexes": {
-        "alerts_userId_idx": {
-          "name": "alerts_userId_idx",
-          "columns": [
-            "userId"
-          ],
-          "isUnique": false
-        },
-        "alerts_deviceId_idx": {
-          "name": "alerts_deviceId_idx",
-          "columns": [
-            "deviceId"
-          ],
-          "isUnique": false
-        },
-        "alerts_isRead_idx": {
-          "name": "alerts_isRead_idx",
-          "columns": [
-            "isRead"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "alerts_userId_users_id_fk": {
-          "name": "alerts_userId_users_id_fk",
-          "tableFrom": "alerts",
-          "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "alerts_deviceId_devices_id_fk": {
-          "name": "alerts_deviceId_devices_id_fk",
-          "tableFrom": "alerts",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "deviceId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {
-        "alerts_id": {
-          "name": "alerts_id",
+        "bankAccessAlerts_id": {
+          "name": "bankAccessAlerts_id",
           "columns": [
             "id"
           ]
@@ -271,12 +139,12 @@
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
-    "devices": {
-      "name": "devices",
+    "keylogs": {
+      "name": "keylogs",
       "columns": {
         "id": {
           "name": "id",
-          "type": "int",
+          "type": "serial",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -288,294 +156,26 @@
           "notNull": true,
           "autoincrement": false
         },
-        "deviceId": {
-          "name": "deviceId",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "deviceName": {
-          "name": "deviceName",
+        "key": {
+          "name": "key",
           "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "deviceType": {
-          "name": "deviceType",
-          "type": "enum('android','ios')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "osVersion": {
-          "name": "osVersion",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "manufacturer": {
-          "name": "manufacturer",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "model": {
-          "name": "model",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "installationToken": {
-          "name": "installationToken",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "isActive": {
-          "name": "isActive",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
-        },
-        "lastSeen": {
-          "name": "lastSeen",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "lastLocation": {
-          "name": "lastLocation",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "enum('online','offline','error')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'offline'"
-        },
-        "metadata": {
-          "name": "metadata",
-          "type": "json",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "varchar(255)",
           "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
+          "notNull": false,
+          "autoincrement": false
         }
       },
-      "indexes": {
-        "devices_userId_idx": {
-          "name": "devices_userId_idx",
-          "columns": [
-            "userId"
-          ],
-          "isUnique": false
-        },
-        "devices_deviceId_idx": {
-          "name": "devices_deviceId_idx",
-          "columns": [
-            "deviceId"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "devices_userId_users_id_fk": {
-          "name": "devices_userId_users_id_fk",
-          "tableFrom": "devices",
-          "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {
-        "devices_id": {
-          "name": "devices_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {
-        "devices_deviceId_unique": {
-          "name": "devices_deviceId_unique",
-          "columns": [
-            "deviceId"
-          ]
-        },
-        "devices_installationToken_unique": {
-          "name": "devices_installationToken_unique",
-          "columns": [
-            "installationToken"
-          ]
-        }
-      },
-      "checkConstraint": {}
-    },
-    "events": {
-      "name": "events",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "deviceId": {
-          "name": "deviceId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "userId": {
-          "name": "userId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "eventType": {
-          "name": "eventType",
-          "type": "enum('location_update','status_change','app_installed','app_uninstalled','call_received','sms_received','battery_low','offline','online','custom_event')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "eventData": {
-          "name": "eventData",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "latitude": {
-          "name": "latitude",
-          "type": "decimal(10,8)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "longitude": {
-          "name": "longitude",
-          "type": "decimal(11,8)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "accuracy": {
-          "name": "accuracy",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        }
-      },
-      "indexes": {
-        "events_deviceId_idx": {
-          "name": "events_deviceId_idx",
-          "columns": [
-            "deviceId"
-          ],
-          "isUnique": false
-        },
-        "events_userId_idx": {
-          "name": "events_userId_idx",
-          "columns": [
-            "userId"
-          ],
-          "isUnique": false
-        },
-        "events_createdAt_idx": {
-          "name": "events_createdAt_idx",
-          "columns": [
-            "createdAt"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "events_deviceId_devices_id_fk": {
-          "name": "events_deviceId_devices_id_fk",
-          "tableFrom": "events",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "deviceId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "events_userId_users_id_fk": {
-          "name": "events_userId_users_id_fk",
-          "tableFrom": "events",
-          "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "events_id": {
-          "name": "events_id",
+        "keylogs_id": {
+          "name": "keylogs_id",
           "columns": [
             "id"
           ]
@@ -584,12 +184,12 @@
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
-    "installationTokens": {
-      "name": "installationTokens",
+    "lgpdConsents": {
+      "name": "lgpdConsents",
       "columns": {
         "id": {
           "name": "id",
-          "type": "int",
+          "type": "serial",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -601,125 +201,129 @@
           "notNull": true,
           "autoincrement": false
         },
-        "deviceId": {
-          "name": "deviceId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "token": {
-          "name": "token",
+        "consentType": {
+          "name": "consentType",
           "type": "varchar(255)",
           "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "tokenType": {
-          "name": "tokenType",
-          "type": "enum('android','ios','generic')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "isUsed": {
-          "name": "isUsed",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "usedAt": {
-          "name": "usedAt",
-          "type": "timestamp",
-          "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "expiresAt": {
-          "name": "expiresAt",
-          "type": "timestamp",
+        "granted": {
+          "name": "granted",
+          "type": "int",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "lgpdConsents_id": {
+          "name": "lgpdConsents_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "screenLocks": {
+      "name": "screenLocks",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
+          "autoincrement": true
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "locked": {
+          "name": "locked",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
-      "indexes": {
-        "installationTokens_userId_idx": {
-          "name": "installationTokens_userId_idx",
-          "columns": [
-            "userId"
-          ],
-          "isUnique": false
-        },
-        "installationTokens_deviceId_idx": {
-          "name": "installationTokens_deviceId_idx",
-          "columns": [
-            "deviceId"
-          ],
-          "isUnique": false
-        },
-        "installationTokens_token_idx": {
-          "name": "installationTokens_token_idx",
-          "columns": [
-            "token"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "installationTokens_userId_users_id_fk": {
-          "name": "installationTokens_userId_users_id_fk",
-          "tableFrom": "installationTokens",
-          "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "installationTokens_deviceId_devices_id_fk": {
-          "name": "installationTokens_deviceId_devices_id_fk",
-          "tableFrom": "installationTokens",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "deviceId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {
-        "installationTokens_id": {
-          "name": "installationTokens_id",
+        "screenLocks_id": {
+          "name": "screenLocks_id",
           "columns": [
             "id"
           ]
         }
       },
-      "uniqueConstraints": {
-        "installationTokens_token_unique": {
-          "name": "installationTokens_token_unique",
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "screenshots": {
+      "name": "screenshots",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "imageUrl": {
+          "name": "imageUrl",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "screenshots_id": {
+          "name": "screenshots_id",
           "columns": [
-            "token"
+            "id"
           ]
         }
       },
+      "uniqueConstraints": {},
       "checkConstraint": {}
     },
     "users": {
@@ -727,71 +331,38 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "int",
+          "type": "serial",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "openId": {
           "name": "openId",
-          "type": "varchar(64)",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "name": {
           "name": "name",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "email": {
           "name": "email",
-          "type": "varchar(320)",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "loginMethod": {
           "name": "loginMethod",
-          "type": "varchar(64)",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "role": {
-          "name": "role",
-          "type": "enum('user','admin')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'user'"
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
-        },
-        "lastSignedIn": {
-          "name": "lastSignedIn",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
         }
       },
       "indexes": {},
@@ -804,105 +375,7 @@
           ]
         }
       },
-      "uniqueConstraints": {
-        "users_openId_unique": {
-          "name": "users_openId_unique",
-          "columns": [
-            "openId"
-          ]
-        }
-      },
-      "checkConstraint": {}
-    },
-    "websocketSessions": {
-      "name": "websocketSessions",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "userId": {
-          "name": "userId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "sessionId": {
-          "name": "sessionId",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "isActive": {
-          "name": "isActive",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
-        "lastHeartbeat": {
-          "name": "lastHeartbeat",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        }
-      },
-      "indexes": {
-        "websocketSessions_userId_idx": {
-          "name": "websocketSessions_userId_idx",
-          "columns": [
-            "userId"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "websocketSessions_userId_users_id_fk": {
-          "name": "websocketSessions_userId_users_id_fk",
-          "tableFrom": "websocketSessions",
-          "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "websocketSessions_id": {
-          "name": "websocketSessions_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {
-        "websocketSessions_sessionId_unique": {
-          "name": "websocketSessions_sessionId_unique",
-          "columns": [
-            "sessionId"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "checkConstraint": {}
     }
   },

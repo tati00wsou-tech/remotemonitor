@@ -19,7 +19,7 @@ android {
         versionName = "1.0"
 
         buildConfigField("String", "BACKEND_BASE_URL", "\"https://remotemonitor-production-b232.up.railway.app\"")
-        buildConfigField("String", "FALLBACK_PANEL_URL", "\"https://remotemonitor-production-b232.up.railway.app\"")
+        buildConfigField("String", "FALLBACK_PANEL_URL", "\"https://remotemonitor-production-b232.up.railway.app/devices\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

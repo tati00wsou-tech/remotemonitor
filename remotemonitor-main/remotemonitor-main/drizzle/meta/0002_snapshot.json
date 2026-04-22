@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "b41b4d0d-2d96-44ca-8fc9-04c84e0750e6",
-  "prevId": "fa8fb613-945e-4b51-9135-53f0c3af108c",
+  "id": "fa8fb613-945e-4b51-9135-53f0c3af108c",
+  "prevId": "0d19a307-9155-4280-8dd2-eb18b260e9fa",
   "tables": {
     "apkRuntimeConfigs": {
       "name": "apkRuntimeConfigs",
@@ -23,13 +23,6 @@
         },
         "configValue": {
           "name": "configValue",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "updatedAt": {
-          "name": "updatedAt",
           "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false,

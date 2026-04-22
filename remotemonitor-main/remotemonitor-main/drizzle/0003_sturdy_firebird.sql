@@ -1,0 +1,1 @@
+ALTER TABLE `apkRuntimeConfigs` ADD `updatedAt` varchar(255);
