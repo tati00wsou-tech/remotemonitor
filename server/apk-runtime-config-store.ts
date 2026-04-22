@@ -141,6 +141,8 @@ export async function getRuntimeApkConfigFromDb(packageName?: string): Promise<P
     if (exact.length > 0) {
       return toPersistedConfig(exact[0]);
     }
+
+    return null;
   }
 
   const latest = await db
