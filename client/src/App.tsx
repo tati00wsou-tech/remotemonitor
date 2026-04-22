@@ -20,7 +20,12 @@ function App() {
   const logoutMutation = trpc.auth.logout.useMutation();
 
   const handleLogin = () => {
-    window.location.href = getLoginUrl();
+    try {
+      window.location.href = getLoginUrl();
+    } catch (error) {
+      console.error("[Auth] Login URL generation failed:", error);
+      alert("Configuracao de OAuth ausente no deploy. Defina VITE_OAUTH_PORTAL_URL e VITE_APP_ID no Railway e refaca o deploy.");
+    }
   };
 
   const handleLogout = async () => {
