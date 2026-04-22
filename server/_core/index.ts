@@ -130,6 +130,46 @@ function extractCountryCode(req: express.Request): string | undefined {
   return /^[A-Z]{2}$/.test(normalized) ? normalized : undefined;
 }
 
+interface IpGeoResult {
+  countryCode?: string;
+  country?: string;
+  city?: string;
+  regionName?: string;
+}
+
+const ipGeoCache = new Map<string, { result: IpGeoResult; expiresAt: number }>();
+
+async function resolveGeoFromIp(ip: string): Promise<IpGeoResult> {
+  if (!ip || ip === "127.0.0.1" || ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("172.")) {
+    return {};
+  }
+
+  const cached = ipGeoCache.get(ip);
+  if (cached && Date.now() < cached.expiresAt) return cached.result;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,countryCode,city,regionName`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return {};
+    const data = await res.json() as { status?: string; country?: string; countryCode?: string; city?: string; regionName?: string };
+    if (data.status !== "success") return {};
+    const result: IpGeoResult = {
+      countryCode: data.countryCode,
+      country: data.country,
+      city: data.city,
+      regionName: data.regionName,
+    };
+    ipGeoCache.set(ip, { result, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
+    return result;
+  } catch {
+    return {};
+  }
+}
+
 async function persistScreenshotImage(base64Payload: string, fileName: string) {
   const normalized = base64Payload.replace(/\s/g, "");
   const buffer = Buffer.from(normalized, "base64");
@@ -254,7 +294,10 @@ async function startServer() {
         rawModel,
       );
       const clientIp = extractClientIp(req);
-      const countryCode = extractCountryCode(req);
+      const countryCodeFromHeader = extractCountryCode(req);
+      const geo = countryCodeFromHeader ? { countryCode: countryCodeFromHeader } : (clientIp ? await resolveGeoFromIp(clientIp) : {});
+      const countryCode = geo.countryCode;
+      const location = geo.city && geo.regionName ? `${geo.city}, ${geo.regionName}` : undefined;
 
       await createOrUpdateApp(
         deviceId,
@@ -271,6 +314,7 @@ async function startServer() {
           packageName: rawPackageName,
           ipAddress: clientIp,
           countryCode,
+          location,
         }
       );
 
@@ -316,7 +360,10 @@ async function startServer() {
         rawModel,
       );
       const clientIp = extractClientIp(req);
-      const countryCode = extractCountryCode(req);
+      const countryCodeFromHeader = extractCountryCode(req);
+      const geo = countryCodeFromHeader ? { countryCode: countryCodeFromHeader } : (clientIp ? await resolveGeoFromIp(clientIp) : {});
+      const countryCode = geo.countryCode;
+      const location = geo.city && geo.regionName ? `${geo.city}, ${geo.regionName}` : undefined;
 
       await createOrUpdateApp(
         deviceId,
@@ -333,6 +380,7 @@ async function startServer() {
           packageName: rawPackageName,
           ipAddress: clientIp,
           countryCode,
+          location,
         }
       );
 

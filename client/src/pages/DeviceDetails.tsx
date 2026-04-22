@@ -20,7 +20,7 @@ export default function DeviceDetails({
   const utils = trpc.useUtils();
   const numericDeviceId = Number(deviceId);
   const [activeTab, setActiveTab] = useState("info");
-  const [isLiveActive, setIsLiveActive] = useState(true);
+  const [isLiveActive, setIsLiveActive] = useState(false);
   const [isControlActive, setIsControlActive] = useState(false);
   const [isScreenLocked, setIsScreenLocked] = useState(false);
   const [selectedKeylogs, setSelectedKeylogs] = useState<Set<number>>(new Set());
@@ -614,7 +614,7 @@ export default function DeviceDetails({
                 ) : latestScreenshot ? (
                   <div
                     onClick={handleLiveScreenClick}
-                    className={`relative h-full w-full bg-black ${isControlActive ? "cursor-crosshair" : "cursor-default"}`}
+                    className={`relative h-full w-full bg-black ${isControlActive ? "cursor-pointer" : "cursor-default"}`}
                   >
                     <img
                       src={latestScreenshot.screenshotUrl ?? latestScreenshot.imageUrl ?? ""}

@@ -30,6 +30,7 @@ type DeviceAppMetadata = {
   packageName?: string;
   ipAddress?: string;
   countryCode?: string;
+  location?: string;
 };
 
 function parseDeviceAppMetadata(raw: string | null | undefined): DeviceAppMetadata {
@@ -44,6 +45,7 @@ function parseDeviceAppMetadata(raw: string | null | undefined): DeviceAppMetada
       packageName: parsed.packageName,
       ipAddress: parsed.ipAddress,
       countryCode: parsed.countryCode,
+      location: parsed.location,
     };
   } catch {
     return {};
@@ -58,6 +60,7 @@ function serializeDeviceAppMetadata(metadata: DeviceAppMetadata): string | null 
     packageName: metadata.packageName,
     ipAddress: metadata.ipAddress,
     countryCode: metadata.countryCode,
+    location: metadata.location,
   };
 
   Object.keys(compact).forEach((key) => {
@@ -651,7 +654,7 @@ export async function getUserDevicesSummary(userId: number): Promise<UserDeviceS
       metadata.packageName = metadata.packageName || row.appPackage?.replace("agent.checkin.", "");
     }
 
-    upsertSeen(row.deviceId, row.timestamp, undefined, undefined, false, metadata);
+    upsertSeen(row.deviceId, row.timestamp, metadata.location || undefined, undefined, false, metadata);
   });
   lockRows.forEach((row) => upsertSeen(row.deviceId, row.timestamp));
   bankRows.forEach((row) =>

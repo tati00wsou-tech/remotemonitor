@@ -138,6 +138,19 @@ export const appRouter = router({
       }),
   }),
 
+  screenLock: router({
+    lock: protectedProcedure
+      .input(z.object({ deviceId: z.number() }))
+      .mutation(async () => {
+        return { success: true, locked: true };
+      }),
+    unlock: protectedProcedure
+      .input(z.object({ deviceId: z.number() }))
+      .mutation(async () => {
+        return { success: true, locked: false };
+      }),
+  }),
+
   corporate: corporateRouter,
   apk: apkRouter,
   lgpd: lgpdRequestsRouter,
