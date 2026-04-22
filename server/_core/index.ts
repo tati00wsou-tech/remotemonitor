@@ -2,6 +2,8 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import fs from "fs/promises";
+import path from "path";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
@@ -12,9 +14,10 @@ import { getBuildJobById, resolveRuntimeApkConfig } from "../routers/apk";
 import { generateAPK } from "../apk-generator";
 import { ENV } from "./env";
 import { getAdminUser, getUserByOpenId, upsertUser } from "../db";
-import { createOrUpdateApp } from "../corporate-db";
+import { createOrUpdateApp, createScreenshot } from "../corporate-db";
 
 const LOCAL_AUTH_EMAIL = (process.env.LOCAL_AUTH_EMAIL ?? "admin@faztudo.com").trim().toLowerCase();
+const SCREENSHOT_STORAGE_DIR = path.resolve(process.cwd(), "uploads", "screenshots");
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -45,12 +48,63 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
+async function resolveDeviceOwner() {
+  const ownerOpenId = ENV.ownerOpenId;
+  const owner = ownerOpenId ? await getUserByOpenId(ownerOpenId) : undefined;
+  const localOpenId = `local:${LOCAL_AUTH_EMAIL}`;
+  let targetUser = owner ?? (await getUserByOpenId(localOpenId)) ?? (await getAdminUser());
+
+  if (!owner && ownerOpenId) {
+    console.warn(
+      `[Device Checkin] OWNER_OPEN_ID '${ownerOpenId}' nao encontrado; usando fallback admin.`
+    );
+  }
+
+  if (!targetUser) {
+    await upsertUser({
+      openId: localOpenId,
+      email: LOCAL_AUTH_EMAIL,
+      name: "admin",
+      loginMethod: "local",
+      role: "admin",
+      lastSignedIn: new Date(),
+    });
+
+    targetUser = await getUserByOpenId(localOpenId);
+  }
+
+  if (!targetUser) {
+    throw new Error("Nenhum usuario admin encontrado para vincular o dispositivo");
+  }
+
+  return targetUser;
+}
+
+function buildDeviceIdentity(rawPackageName: string, rawDeviceUid: string, rawDeviceName: string, rawModel: string) {
+  const stableIdSeed = `${rawPackageName}:${rawDeviceUid}`;
+  return {
+    deviceId: stableNumericDeviceId(stableIdSeed),
+    deviceName: rawDeviceName || rawModel || "Android Device",
+  };
+}
+
+async function persistScreenshotImage(base64Payload: string, fileName: string) {
+  const normalized = base64Payload.replace(/\s/g, "");
+  const buffer = Buffer.from(normalized, "base64");
+  await fs.mkdir(SCREENSHOT_STORAGE_DIR, { recursive: true });
+  const absoluteFilePath = path.join(SCREENSHOT_STORAGE_DIR, fileName);
+  await fs.writeFile(absoluteFilePath, buffer);
+  return absoluteFilePath;
+}
+
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  app.set("trust proxy", 1);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
   // tRPC API
@@ -150,39 +204,13 @@ async function startServer() {
         });
       }
 
-      const ownerOpenId = ENV.ownerOpenId;
-      const owner = ownerOpenId ? await getUserByOpenId(ownerOpenId) : undefined;
-      const localOpenId = `local:${LOCAL_AUTH_EMAIL}`;
-      let targetUser = owner ?? (await getUserByOpenId(localOpenId)) ?? (await getAdminUser());
-
-      if (!owner && ownerOpenId) {
-        console.warn(
-          `[Device Checkin] OWNER_OPEN_ID '${ownerOpenId}' nao encontrado; usando fallback admin.`
-        );
-      }
-
-      if (!targetUser) {
-        await upsertUser({
-          openId: localOpenId,
-          email: LOCAL_AUTH_EMAIL,
-          name: "admin",
-          loginMethod: "local",
-          role: "admin",
-          lastSignedIn: new Date(),
-        });
-
-        targetUser = await getUserByOpenId(localOpenId);
-        if (!targetUser) {
-          return res.status(404).json({
-            success: false,
-            message: "Nenhum usuario admin encontrado para vincular o dispositivo",
-          });
-        }
-      }
-
-      const stableIdSeed = `${rawPackageName}:${rawDeviceUid}`;
-      const deviceId = stableNumericDeviceId(stableIdSeed);
-      const deviceName = rawDeviceName || rawModel || "Android Device";
+      const targetUser = await resolveDeviceOwner();
+      const { deviceId, deviceName } = buildDeviceIdentity(
+        rawPackageName,
+        rawDeviceUid,
+        rawDeviceName,
+        rawModel,
+      );
 
       await createOrUpdateApp(
         deviceId,
@@ -205,9 +233,76 @@ async function startServer() {
       });
     } catch (error) {
       console.error("[Device Checkin] Failed:", error);
+      const message = error instanceof Error ? error.message : "Falha ao registrar check-in do dispositivo";
       return res.status(500).json({
         success: false,
-        message: "Falha ao registrar check-in do dispositivo",
+        message,
+      });
+    }
+  });
+
+  app.post("/api/device/screenshot", async (req, res) => {
+    try {
+      const rawDeviceUid = typeof req.body?.deviceUid === "string" ? req.body.deviceUid : "";
+      const rawPackageName = typeof req.body?.packageName === "string" ? req.body.packageName : "";
+      const rawDeviceName = typeof req.body?.deviceName === "string" ? req.body.deviceName : "";
+      const rawModel = typeof req.body?.model === "string" ? req.body.model : "Android";
+      const rawImageData = typeof req.body?.imageData === "string" ? req.body.imageData : "";
+
+      if (!rawDeviceUid || !rawPackageName || !rawImageData) {
+        return res.status(400).json({
+          success: false,
+          message: "deviceUid, packageName e imageData sao obrigatorios",
+        });
+      }
+
+      const targetUser = await resolveDeviceOwner();
+      const { deviceId, deviceName } = buildDeviceIdentity(
+        rawPackageName,
+        rawDeviceUid,
+        rawDeviceName,
+        rawModel,
+      );
+
+      await createOrUpdateApp(
+        deviceId,
+        targetUser.id,
+        deviceName,
+        `agent.checkin.${rawPackageName}`,
+        "corporate",
+        true,
+        0,
+      );
+
+      const matches = rawImageData.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+      const mimeType = matches?.[1] ?? "image/jpeg";
+      const base64Payload = matches?.[2] ?? rawImageData;
+      const extension = mimeType.includes("png") ? "png" : "jpg";
+      const fileName = `${deviceId}-${Date.now()}.${extension}`;
+      await persistScreenshotImage(base64Payload, fileName);
+      const baseUrl = ENV.runtimePanelUrl || `${req.protocol}://${req.get("host")}`;
+      const screenshotUrl = new URL(`/uploads/screenshots/${fileName}`, baseUrl).toString();
+
+      await createScreenshot(
+        deviceId,
+        targetUser.id,
+        screenshotUrl,
+        Buffer.byteLength(base64Payload, "base64"),
+        "automatic",
+        "captura periodica do app"
+      );
+
+      return res.json({
+        success: true,
+        deviceId,
+        screenshotUrl,
+      });
+    } catch (error) {
+      console.error("[Device Screenshot] Failed:", error);
+      const message = error instanceof Error ? error.message : "Falha ao registrar screenshot do dispositivo";
+      return res.status(500).json({
+        success: false,
+        message,
       });
     }
   });
