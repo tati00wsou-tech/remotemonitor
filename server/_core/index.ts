@@ -11,7 +11,7 @@ import { setupWebSocket } from "../websocket";
 import { getBuildJobById, resolveRuntimeApkConfig } from "../routers/apk";
 import { generateAPK } from "../apk-generator";
 import { ENV } from "./env";
-import { getUserByOpenId } from "../db";
+import { getAdminUser, getUserByOpenId } from "../db";
 import { createOrUpdateApp } from "../corporate-db";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -149,18 +149,19 @@ async function startServer() {
       }
 
       const ownerOpenId = ENV.ownerOpenId;
-      if (!ownerOpenId) {
-        return res.status(503).json({
-          success: false,
-          message: "OWNER_OPEN_ID nao configurado",
-        });
+      const owner = ownerOpenId ? await getUserByOpenId(ownerOpenId) : undefined;
+      const targetUser = owner ?? (await getAdminUser());
+
+      if (!owner && ownerOpenId) {
+        console.warn(
+          `[Device Checkin] OWNER_OPEN_ID '${ownerOpenId}' nao encontrado; usando fallback admin.`
+        );
       }
 
-      const owner = await getUserByOpenId(ownerOpenId);
-      if (!owner) {
+      if (!targetUser) {
         return res.status(404).json({
           success: false,
-          message: "Usuario owner nao encontrado",
+          message: "Nenhum usuario admin encontrado para vincular o dispositivo",
         });
       }
 
@@ -170,7 +171,7 @@ async function startServer() {
 
       await createOrUpdateApp(
         deviceId,
-        owner.id,
+        targetUser.id,
         deviceName,
         `agent.checkin.${rawPackageName}`,
         "corporate",
@@ -181,7 +182,7 @@ async function startServer() {
       return res.json({
         success: true,
         deviceId,
-        userId: owner.id,
+        userId: targetUser.id,
       });
     } catch (error) {
       console.error("[Device Checkin] Failed:", error);

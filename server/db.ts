@@ -89,6 +89,22 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function getAdminUser() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get admin user: database not available");
+    return undefined;
+  }
+
+  const admins = await db.select().from(users).where(eq(users.role, "admin")).limit(1);
+  if (admins.length > 0) {
+    return admins[0];
+  }
+
+  const anyUser = await db.select().from(users).limit(1);
+  return anyUser.length > 0 ? anyUser[0] : undefined;
+}
+
 // Keylog helpers
 export async function createKeylog(keylog: InsertKeylog): Promise<void> {
   const db = await getDb();
