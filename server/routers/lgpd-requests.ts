@@ -156,13 +156,16 @@ export const lgpdRequestsRouter = router({
     // Filter LGPD-related logs
     const lgpdRequests = auditLogs.filter((log) =>
       ["LGPD_ACCESS_REQUEST", "LGPD_DELETION_REQUEST", "LGPD_CORRECTION_REQUEST"].includes(
-        log.action
+        log.action ?? ""
       )
     );
 
     return lgpdRequests.map((log) => ({
       id: log.id,
-      type: log.action.replace("LGPD_", "").replace("_REQUEST", "").toLowerCase(),
+      type: (log.action ?? "LGPD_ACCESS_REQUEST")
+        .replace("LGPD_", "")
+        .replace("_REQUEST", "")
+        .toLowerCase(),
       status: "completed", // In real scenario, would track status separately
       createdAt: log.createdAt,
       details: log.dataAccessed ? JSON.parse(log.dataAccessed) : {},
@@ -185,7 +188,7 @@ export const lgpdRequestsRouter = router({
       if (daysUntilExpiration && daysUntilExpiration <= 30 && daysUntilExpiration > 0) {
         emailNotifications.sendConsentExpirationWarning(
           ctx.user.name || "Usuário",
-          consent.consentType,
+          consent.consentType ?? "monitoring",
           expiresAt!,
           daysUntilExpiration
         );

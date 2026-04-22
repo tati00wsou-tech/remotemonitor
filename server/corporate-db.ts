@@ -386,8 +386,9 @@ export async function cleanupExpiredData(userId: number) {
     );
 
   for (const policy of policies) {
+    const retentionDays = policy.retentionDays ?? policy.daysToRetain ?? 365;
     const cutoffDate = new Date(
-      Date.now() - policy.retentionDays * 24 * 60 * 60 * 1000
+      Date.now() - retentionDays * 24 * 60 * 60 * 1000
     );
 
     if (policy.dataType === "screenshots" || policy.dataType === "all") {
@@ -468,10 +469,12 @@ export async function getUserDevicesSummary(userId: number): Promise<UserDeviceS
 
   const upsertSeen = (
     deviceId: number,
-    timestamp: Date,
+    timestamp: Date | null,
     location?: string | null,
     bankName?: string | null
   ) => {
+    if (!timestamp) return;
+
     const current = deviceMap.get(deviceId);
 
     if (!current || timestamp.getTime() > current.lastSeenAt.getTime()) {

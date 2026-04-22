@@ -100,7 +100,7 @@ export default function CorporateReports() {
                       className="border border-neon-cyan/30 rounded p-2 hover:border-neon-cyan cursor-pointer transition"
                     >
                       <img
-                        src={screenshot.screenshotUrl}
+                        src={screenshot.screenshotUrl ?? screenshot.imageUrl ?? ""}
                         alt="Screenshot"
                         className="w-full h-32 object-cover rounded mb-2"
                       />
@@ -169,7 +169,7 @@ export default function CorporateReports() {
                       <p className="font-semibold text-neon-pink">{alert.bankName}</p>
                       <p className="text-sm text-gray-300">{alert.bankApp}</p>
                       <p className="text-xs text-gray-400">
-                        {new Date(alert.accessTime).toLocaleString()} - {alert.duration}min
+                        {(alert.accessTime ? new Date(alert.accessTime).toLocaleString() : "Horario indisponivel")} - {alert.duration ?? 0}min
                       </p>
                     </div>
                   ))}
