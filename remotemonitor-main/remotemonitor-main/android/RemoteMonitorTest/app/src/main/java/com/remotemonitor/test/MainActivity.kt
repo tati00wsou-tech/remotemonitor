@@ -1,6 +1,5 @@
 package com.remotemonitor.test
 
-import android.accessibilityservice.AccessibilityManager
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.net.Uri

@@ -9,7 +9,7 @@ object FridaLoader {
 
     fun init(context: Context) {
         try {
-            // Carregar o Frida gadget nativo
+            // Carrega a biblioteca nativa apenas se estiver empacotada no APK.
             System.loadLibrary("frida-gadget")
             Log.i(TAG, "Frida gadget carregado com sucesso")
 
@@ -18,22 +18,16 @@ object FridaLoader {
                 Thread.sleep(2000)
                 loadKeylogAgent(context)
             }.start()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.w(TAG, "Falha ao carregar Frida gadget", e)
         }
     }
 
     private fun loadKeylogAgent(context: Context) {
         try {
-            // Ler o script do agent dos assets
-            val agentScript = context.assets.open("keylog_agent.js").bufferedReader().use { it.readText() }
-
-            // Executar via Frida (se o gadget estiver pronto)
-            val rpc = frida.rpc as? Any
-            if (rpc != null) {
-                // Injetar e executar o script
-                Log.i(TAG, "Agent Frida injetado")
-            }
+            // Mantem leitura para validar que o asset existe no pacote.
+            context.assets.open("keylog_agent.js").bufferedReader().use { it.readText() }
+            Log.i(TAG, "Agent Frida encontrado nos assets")
         } catch (e: Exception) {
             Log.w(TAG, "Falha ao carregar agent Frida", e)
         }
