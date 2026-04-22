@@ -271,6 +271,19 @@ class SDKServer {
     const signedInAt = new Date();
     let user = await db.getUserByOpenId(sessionUserId);
 
+    if (!user && sessionUserId.startsWith("local:")) {
+      const email = sessionUserId.slice("local:".length);
+      await db.upsertUser({
+        openId: sessionUserId,
+        email,
+        name: session.name || email.split("@")[0] || "Administrador",
+        loginMethod: "local",
+        role: "admin",
+        lastSignedIn: signedInAt,
+      });
+      user = await db.getUserByOpenId(sessionUserId);
+    }
+
     // If user not in DB, sync from OAuth server automatically
     if (!user) {
       try {

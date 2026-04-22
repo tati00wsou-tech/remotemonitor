@@ -1,15 +1,20 @@
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
+import { useState } from "react";
 
 interface LoginProps {
-  onLogin: () => void;
+  onLogin: (email: string, password: string) => void;
   loading?: boolean;
+  error?: string;
 }
 
-export default function Login({ onLogin, loading = false }: LoginProps) {
+export default function Login({ onLogin, loading = false, error }: LoginProps) {
+  const [email, setEmail] = useState("admin@faztudo.com");
+  const [password, setPassword] = useState("");
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin();
+    onLogin(email, password);
   };
 
   return (
@@ -27,6 +32,24 @@ export default function Login({ onLogin, loading = false }: LoginProps) {
         {/* Formulário */}
         <div className="bg-slate-900/50 backdrop-blur-xl border border-cyan-400/30 rounded-lg p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="Email"
+              className="w-full bg-slate-800/80 border border-cyan-400/30 rounded-lg px-3 py-2 text-white placeholder:text-slate-500"
+              required
+            />
+
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Senha"
+              className="w-full bg-slate-800/80 border border-cyan-400/30 rounded-lg px-3 py-2 text-white placeholder:text-slate-500"
+              required
+            />
+
             <Button
               type="submit"
               disabled={loading}
@@ -38,14 +61,16 @@ export default function Login({ onLogin, loading = false }: LoginProps) {
                   Entrando...
                 </>
               ) : (
-                "Entrar com OAuth"
+                "Entrar"
               )}
             </Button>
+
+            {error ? <p className="text-red-300 text-sm text-center">{error}</p> : null}
           </form>
 
           <div className="mt-6 pt-6 border-t border-cyan-400/20">
             <p className="text-xs text-slate-400 text-center">
-              A autenticacao e feita pelo portal OAuth.
+              Login local habilitado para acesso imediato ao painel.
             </p>
           </div>
         </div>

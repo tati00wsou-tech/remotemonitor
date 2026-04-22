@@ -3,7 +3,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { trpc } from "@/lib/trpc";
-import { getLoginUrl } from "./const";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 
@@ -17,15 +16,16 @@ function App() {
     retry: false,
   });
 
+  const loginMutation = trpc.auth.login.useMutation({
+    onSuccess: async () => {
+      await meQuery.refetch();
+    },
+  });
+
   const logoutMutation = trpc.auth.logout.useMutation();
 
-  const handleLogin = () => {
-    try {
-      window.location.href = getLoginUrl();
-    } catch (error) {
-      console.error("[Auth] Login URL generation failed:", error);
-      alert("Configuracao de OAuth ausente no deploy. Defina VITE_OAUTH_PORTAL_URL e VITE_APP_ID no Railway e refaca o deploy.");
-    }
+  const handleLogin = async (email: string, password: string) => {
+    await loginMutation.mutateAsync({ email, password });
   };
 
   const handleLogout = async () => {
@@ -35,7 +35,6 @@ function App() {
       window.location.href = "/";
     }
   };
-
   if (meQuery.isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 to-slate-900 flex items-center justify-center">
@@ -60,7 +59,11 @@ function App() {
         <TooltipProvider>
           <Toaster />
           {!user ? (
-            <Login onLogin={handleLogin} loading={false} />
+            <Login
+              onLogin={handleLogin}
+              loading={loginMutation.isPending}
+              error={loginMutation.error?.message}
+            />
           ) : (
             <Home user={user} onLogout={handleLogout} />
           )}

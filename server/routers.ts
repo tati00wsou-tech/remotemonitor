@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
-import { COOKIE_NAME } from "../shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "../shared/const";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { createKeylog, getKeylogsByDevice, deleteKeylog, restoreKeylog, getDeletedKeylogs } from "./db";
@@ -9,12 +9,61 @@ import { apkRouter } from "./routers/apk";
 import { corporateRouter } from "./routers/corporate";
 import { lgpdRequestsRouter } from "./routers/lgpd-requests";
 import { getUserDevicesSummary } from "./corporate-db";
+import { sdk } from "./_core/sdk";
+import { upsertUser } from "./db";
+
+const LOCAL_AUTH_EMAIL = (process.env.LOCAL_AUTH_EMAIL ?? "admin@faztudo.com").trim().toLowerCase();
+const LOCAL_AUTH_PASSWORD = (process.env.LOCAL_AUTH_PASSWORD ?? "Mm102030@@").trim();
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
+    login: publicProcedure
+      .input(
+        z.object({
+          email: z.string().email(),
+          password: z.string().min(1),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        if (!LOCAL_AUTH_PASSWORD) {
+          throw new Error("LOCAL_AUTH_PASSWORD is not configured");
+        }
+
+        const email = input.email.trim().toLowerCase();
+        const password = input.password;
+
+        if (email !== LOCAL_AUTH_EMAIL || password !== LOCAL_AUTH_PASSWORD) {
+          throw new Error("Email ou senha invalidos");
+        }
+
+        const openId = `local:${email}`;
+        const name = email.split("@")[0] || "Administrador";
+
+        await upsertUser({
+          openId,
+          email,
+          name,
+          loginMethod: "local",
+          role: "admin",
+          lastSignedIn: new Date(),
+        });
+
+        const sessionToken = await sdk.createSessionToken(openId, {
+          name,
+          expiresInMs: ONE_YEAR_MS,
+        });
+
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, {
+          ...cookieOptions,
+          maxAge: ONE_YEAR_MS,
+        });
+
+        return { success: true } as const;
+      }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
