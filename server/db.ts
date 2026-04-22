@@ -197,6 +197,21 @@ export async function getDeletedKeylogs(deviceId: string) {
   }
 }
 
+export async function deleteKeylogsByDevice(deviceId: string): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete keylogs by device: database not available");
+    return;
+  }
+
+  try {
+    await db.delete(keylogs).where(eq(keylogs.deviceId, deviceId));
+  } catch (error) {
+    console.error("[Database] Failed to delete keylogs by device:", error);
+    throw error;
+  }
+}
+
 export async function getAlertConfigsByUserId(userId: number): Promise<any[]> {
   const db = await getDb();
   if (!db) {

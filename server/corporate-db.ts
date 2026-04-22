@@ -422,6 +422,40 @@ export async function cleanupExpiredData(userId: number) {
   }
 }
 
+export async function deleteDeviceData(userId: number, deviceId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .delete(screenshots)
+    .where(and(eq(screenshots.userId, userId), eq(screenshots.deviceId, deviceId)));
+
+  await db
+    .delete(appsData)
+    .where(and(eq(appsData.userId, userId), eq(appsData.deviceId, deviceId)));
+
+  await db
+    .delete(screenLocks)
+    .where(and(eq(screenLocks.userId, userId), eq(screenLocks.deviceId, deviceId)));
+
+  await db
+    .delete(bankAccessAlerts)
+    .where(
+      and(
+        eq(bankAccessAlerts.userId, userId),
+        eq(bankAccessAlerts.deviceId, deviceId)
+      )
+    );
+
+  await db
+    .delete(lgpdConsents)
+    .where(and(eq(lgpdConsents.userId, userId), eq(lgpdConsents.deviceId, deviceId)));
+
+  await db
+    .delete(auditLogs)
+    .where(and(eq(auditLogs.userId, userId), eq(auditLogs.deviceId, deviceId)));
+}
+
 export async function getUserDevicesSummary(userId: number): Promise<UserDeviceSummary[]> {
   const db = await getDb();
   if (!db) {

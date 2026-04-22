@@ -17,6 +17,7 @@ export default function DeviceDetails({
   deviceName,
   onBack,
 }: DeviceDetailsProps) {
+  const utils = trpc.useUtils();
   const numericDeviceId = Number(deviceId);
   const [activeTab, setActiveTab] = useState("info");
   const [isLiveActive, setIsLiveActive] = useState(true);
@@ -77,6 +78,14 @@ export default function DeviceDetails({
     },
   });
 
+  const removeDeviceMutation = trpc.device.remove.useMutation({
+    onSuccess: async () => {
+      await utils.device.list.invalidate();
+      await screenshotsQuery.refetch();
+      onBack();
+    },
+  });
+
   const handleScreenshot = () => {
     screenshotsQuery.refetch();
   };
@@ -107,8 +116,7 @@ export default function DeviceDetails({
 
   const handleRemoveDevice = () => {
     if (confirm(`Tem certeza que deseja remover ${deviceName}?`)) {
-      alert(`❌ Dispositivo ${deviceName} removido com sucesso`);
-      onBack();
+      removeDeviceMutation.mutate({ deviceId: numericDeviceId });
     }
   };
 
@@ -198,9 +206,10 @@ export default function DeviceDetails({
         </Button>
         <Button
           onClick={handleRemoveDevice}
+          disabled={removeDeviceMutation.isPending}
           className="bg-red-700 hover:bg-red-800 text-white"
         >
-          🗑️ Remover Dispositivo
+          {removeDeviceMutation.isPending ? "Removendo..." : "🗑️ Remover Dispositivo"}
         </Button>
       </div>
 

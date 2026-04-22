@@ -3,12 +3,12 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { COOKIE_NAME, ONE_YEAR_MS } from "../shared/const";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { createKeylog, getKeylogsByDevice, deleteKeylog, restoreKeylog, getDeletedKeylogs } from "./db";
+import { createKeylog, getKeylogsByDevice, deleteKeylog, restoreKeylog, getDeletedKeylogs, deleteKeylogsByDevice } from "./db";
 import { startKeylogSimulator } from "./keylogSimulator";
 import { apkRouter } from "./routers/apk";
 import { corporateRouter } from "./routers/corporate";
 import { lgpdRequestsRouter } from "./routers/lgpd-requests";
-import { getUserDevicesSummary } from "./corporate-db";
+import { deleteDeviceData, getUserDevicesSummary } from "./corporate-db";
 import { sdk } from "./_core/sdk";
 import { upsertUser } from "./db";
 
@@ -128,6 +128,14 @@ export const appRouter = router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return await getUserDevicesSummary(ctx.user.id);
     }),
+
+    remove: protectedProcedure
+      .input(z.object({ deviceId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await deleteDeviceData(ctx.user.id, input.deviceId);
+        await deleteKeylogsByDevice(String(input.deviceId));
+        return { success: true };
+      }),
   }),
 
   corporate: corporateRouter,
