@@ -198,6 +198,15 @@ async function startServer() {
     })
   );
 
+  // Endpoint permanente que redireciona para o APK do GitHub
+  app.get("/api/apk/latest", (req, res) => {
+    const { ENV } = require("./env");
+    if (ENV.apkGithubUrl) {
+      return res.redirect(302, ENV.apkGithubUrl);
+    }
+    return res.status(404).json({ success: false, message: "APK não configurado" });
+  });
+
   app.get("/api/apk/download/:buildId/:fileName", async (req, res) => {
     const { buildId, fileName } = req.params;
     const job = getBuildJobById(buildId);

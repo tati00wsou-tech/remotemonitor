@@ -300,11 +300,11 @@ async function finalizeBuild(job: BuildJob): Promise<void> {
   const fileName = `${job.packageName}.apk`;
   const deliveryMode = job.deliveryMode;
 
-  // GitHub URL tem prioridade: evita tentar Gradle/EAS no servidor
+  // GitHub URL tem prioridade: usa endpoint permanente do próprio servidor
   if (ENV.apkGithubUrl) {
-    job.downloadUrl = ENV.apkGithubUrl;
+    job.downloadUrl = '/api/apk/latest';
     job.artifactSource = 'github';
-    job.message = 'APK pronto com link direto do GitHub.';
+    job.message = 'APK pronto para download.';
     await persistRuntimeConfig(job);
     return;
   }
