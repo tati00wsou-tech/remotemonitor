@@ -430,7 +430,7 @@ export default function APKBuilderPage() {
                   <li>✓ Tema corporativo</li>
                   {enableRootBypass && <li>✓ Bypass Root Completo</li>}
                   {enablePlayProtectBypass && <li>✓ Desinstalação Automática do Play Protect</li>}
-                  {unlockPassword && <li>✓ Senha de Desbloqueio: {unlockPassword.substring(0, 2)}***</li>}
+
                 </ul>
               </div>
             </div>
