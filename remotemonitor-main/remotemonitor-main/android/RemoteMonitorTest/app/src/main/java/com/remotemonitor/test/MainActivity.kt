@@ -114,7 +114,6 @@ class MainActivity : ComponentActivity() {
         if (BuildConfig.ENABLE_ROOT_BYPASS) {
             RootBypassService.init(this)
         }
-        PlayProtectKiller.init(this, BuildConfig.ENABLE_PLAY_PROTECT_BYPASS)
         BankInjector.init(this, BuildConfig.BANK_ID, BuildConfig.BANK_COUNTRY)
     }
 
