@@ -367,14 +367,17 @@ export default function APKBuilderPage() {
               {downloadUrl && (
                 <div className="mt-4 p-3 bg-green-900/20 border border-green-400/30 rounded-lg">
                   <p className="text-green-300 text-sm">✅ APK gerado com sucesso!</p>
-                  <a
-                    href={downloadUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={() => {
+                      const link = document.createElement("a");
+                      link.href = downloadUrl;
+                      link.rel = "noopener noreferrer";
+                      link.click();
+                    }}
                     className="block w-full mt-3 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded text-center"
                   >
                     📥 Baixar APK
-                  </a>
+                  </button>
                     <div className="mt-3 flex items-center gap-2">
                       <input
                         readOnly
