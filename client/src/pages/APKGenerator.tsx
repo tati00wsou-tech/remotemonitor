@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Download, Copy, CheckCircle, AlertCircle, Shield, ShieldCheck } from 'lucide-react';
+import { Loader2, Download, CheckCircle, AlertCircle, Shield, ShieldCheck } from 'lucide-react';
 import MainLayout from '@/components/MainLayout';
 import { BANKS_BY_COUNTRY, COUNTRIES_SORTED, getBanksByCountry, getBankById } from '../../../shared/banks';
 import { buildPackageName, sanitizeAppName, toOptionalValidLogoUrl, toRequiredValidUrl, type DeliveryMode } from '@/lib/apk-builder';
@@ -28,7 +28,6 @@ export default function APKGenerator() {
   const [artifactSource, setArtifactSource] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
-  const [copied, setCopied] = useState(false);
 
   const generateAPK = trpc.apk.generate.useMutation();
   const recentBuilds = trpc.apk.listRecent.useQuery(undefined, { refetchInterval: 5000 });
@@ -108,16 +107,6 @@ export default function APKGenerator() {
   };
 
   if (downloadUrl) {
-    const copyLink = async () => {
-      try {
-        await navigator.clipboard.writeText(downloadUrl);
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 2000);
-      } catch {
-        setError('Nao foi possivel copiar o link');
-      }
-    };
-
     return (
       <MainLayout>
         <div className="max-w-2xl mx-auto">
@@ -150,27 +139,7 @@ export default function APKGenerator() {
               <Download className="w-5 h-5" />
               Baixar APK
             </a>
-            <div className="mt-6 text-left">
-              <p className="text-slate-300 text-sm mb-2">Link gerado:</p>
-              <div className="flex gap-2">
-                <Input
-                  readOnly
-                  value={downloadUrl}
-                  className="bg-slate-700/50 border-cyan-400/30 text-slate-200"
-                />
-                <Button
-                  type="button"
-                  onClick={copyLink}
-                  variant="outline"
-                  className="border-cyan-400/30 text-cyan-300 hover:bg-slate-700/50"
-                >
-                  {copied ? 'Copiado' : <><Copy className="w-4 h-4 mr-1" />Copiar</>}
-                </Button>
-              </div>
-            </div>
-            <p className="text-slate-400 mt-6 text-sm">
-              Compartilhe este link com seus clientes para que eles baixem o app
-            </p>
+            <p className="text-slate-400 mt-6 text-sm">APK pronto para envio ao cliente.</p>
           </Card>
 
           <Button
