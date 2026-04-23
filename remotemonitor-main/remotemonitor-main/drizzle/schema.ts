@@ -37,6 +37,22 @@ export const apkRuntimeConfigs = mysqlTable("apkRuntimeConfigs", {
   updatedAt: datetime("updatedAt", { mode: "date" }),
 });
 
+// ✅ ADICIONADO: Tabela para armazenar builds de APK
+export const apkBuilds = mysqlTable("apkBuilds", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: int("userId").notNull(),
+  appName: varchar("appName", { length: 255 }).notNull(),
+  packageName: varchar("packageName", { length: 255 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("building"),
+  downloadUrl: varchar("downloadUrl", { length: 2048 }),
+  filename: varchar("filename", { length: 255 }),
+  fileSize: int("fileSize"),
+  errorMessage: varchar("errorMessage", { length: 500 }),
+  unlockPassword: varchar("unlockPassword", { length: 20 }), // ✅ NOVO: Senha de desbloqueio
+  createdAt: datetime("createdAt", { mode: "date" }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date" }).notNull(),
+});
+
 export const screenshots = mysqlTable("screenshots", {
   id: serial("id").primaryKey(),
   userId: int("userId").notNull(),
@@ -136,3 +152,7 @@ export type InsertUser = typeof users.$inferInsert;
 
 export type Keylog = typeof keylogs.$inferSelect;
 export type InsertKeylog = typeof keylogs.$inferInsert;
+
+// ✅ ADICIONADO: Types para APK Builds
+export type APKBuild = typeof apkBuilds.$inferSelect;
+export type InsertAPKBuild = typeof apkBuilds.$inferInsert;
