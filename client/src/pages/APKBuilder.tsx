@@ -367,44 +367,18 @@ export default function APKBuilderPage() {
               {downloadUrl && (
                 <div className="mt-4 p-3 bg-green-900/20 border border-green-400/30 rounded-lg">
                   <p className="text-green-300 text-sm">✅ APK gerado com sucesso!</p>
-                  <Button
-                    onClick={() => {
-                      const link = document.createElement("a");
-                      link.href = downloadUrl;
-                      link.download = `${companyName}-Monitor.apk`;
-                      link.click();
-                    }}
-                    className="w-full mt-3 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded"
+                  <a
+                    href={downloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-full mt-3 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded text-center"
                   >
                     📥 Baixar APK
-                  </Button>
+                  </a>
                 </div>
               )}
 
-              {/* ✅ ADICIONADO: Exibir a senha de desbloqueio */}
-              {unlockPassword && (
-                <div className="mt-4 p-4 bg-purple-900/20 border border-purple-400/30 rounded-lg">
-                  <p className="text-purple-300 text-sm font-semibold mb-2">🔐 Senha de Desbloqueio</p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-slate-800/50 border border-purple-400/30 rounded px-3 py-2">
-                      <p className="text-white font-mono text-lg tracking-widest">{unlockPassword}</p>
-                    </div>
-                    <Button
-                      onClick={handleCopyPassword}
-                      className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2"
-                    >
-                      {copiedPassword ? (
-                        <Check className="w-4 h-4" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-purple-300 mt-2">
-                    ⚠️ Guarde esta senha com segurança. É necessária para desbloquear o dispositivo.
-                  </p>
-                </div>
-              )}
+
             </div>
           </Card>
 
