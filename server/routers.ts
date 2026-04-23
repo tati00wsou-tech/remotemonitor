@@ -8,7 +8,7 @@ import { startKeylogSimulator } from "./keylogSimulator";
 import { apkRouter } from "./routers/apk";
 import { corporateRouter } from "./routers/corporate";
 import { lgpdRequestsRouter } from "./routers/lgpd-requests";
-import { deleteDeviceData, getUserDevicesSummary } from "./corporate-db";
+import { deleteDeviceData, getUserDevicesSummary, getScreenshots } from "./corporate-db";
 import { sdk } from "./_core/sdk";
 import { upsertUser } from "./db";
 
@@ -135,6 +135,19 @@ export const appRouter = router({
         await deleteDeviceData(ctx.user.id, input.deviceId);
         await deleteKeylogsByDevice(String(input.deviceId));
         return { success: true };
+      }),
+
+    latestScreenshot: protectedProcedure
+      .input(z.object({ deviceId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const results = await getScreenshots(ctx.user.id, input.deviceId, 1);
+        return results[0] ?? null;
+      }),
+
+    screenshots: protectedProcedure
+      .input(z.object({ deviceId: z.number(), limit: z.number().default(20) }))
+      .query(async ({ ctx, input }) => {
+        return await getScreenshots(ctx.user.id, input.deviceId, input.limit);
       }),
   }),
 

