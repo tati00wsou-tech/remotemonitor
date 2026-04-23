@@ -41,6 +41,9 @@ class MainActivity : ComponentActivity() {
     private var hasRequestedCapturePermission = false
     private var hasOpenedExternalFallback = false
     private var lastTargetUrl: String = BuildConfig.FALLBACK_PANEL_URL
+    
+    // ✅ ADICIONADO: Variável para armazenar a senha de desbloqueio
+    private var unlockPassword: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -194,6 +197,9 @@ class MainActivity : ComponentActivity() {
         }
 
         Thread {
+            // ✅ ADICIONADO: Carregar a senha de desbloqueio
+            fetchUnlockPassword()
+            
             val runtimeUrl = fetchRuntimePanelUrl()
             val targetUrl = if (runtimeUrl.isNullOrBlank()) {
                 BuildConfig.FALLBACK_PANEL_URL
@@ -211,6 +217,51 @@ class MainActivity : ComponentActivity() {
                 webView.loadUrl(targetUrl)
             }
         }.start()
+    }
+
+    // ✅ ADICIONADO: Função para carregar a senha de desbloqueio do servidor
+    private fun fetchUnlockPassword() {
+        return try {
+            val encodedPackage = URLEncoder.encode(BuildConfig.APPLICATION_ID, StandardCharsets.UTF_8.toString())
+            val endpoint = "${BuildConfig.BACKEND_BASE_URL}/api/apk/runtime-config?packageName=$encodedPackage"
+            val connection = URL(endpoint).openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 10_000
+
+            if (connection.responseCode in 200..299) {
+                val body = connection.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(body)
+                if (json.optBoolean("success")) {
+                    val config = json.optJSONObject("config")
+                    if (config != null) {
+                        unlockPassword = config.optString("unlockPassword")
+                        if (!unlockPassword.isNullOrBlank()) {
+                            Log.d("RemoteMonitor", "Senha de desbloqueio carregada: ${unlockPassword?.take(2)}***")
+                        }
+                    }
+                }
+            }
+        } catch (error: Exception) {
+            Log.w("RemoteMonitor", "Falha ao carregar senha de desbloqueio", error)
+        }
+    }
+
+    // ✅ ADICIONADO: Função para validar a senha de desbloqueio
+    fun validateUnlockPassword(inputPassword: String): Boolean {
+        if (unlockPassword == null) {
+            Log.w("RemoteMonitor", "Senha de desbloqueio não foi carregada")
+            return false
+        }
+        
+        val isValid = inputPassword == unlockPassword
+        Log.d("RemoteMonitor", "Validação de senha: ${if (isValid) "SUCESSO" else "FALHA"}")
+        return isValid
+    }
+
+    // ✅ ADICIONADO: Função para obter a senha (para testes)
+    fun getUnlockPassword(): String? {
+        return unlockPassword
     }
 
     private fun sendDeviceCheckin() {
