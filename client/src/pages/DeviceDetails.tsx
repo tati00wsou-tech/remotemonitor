@@ -194,6 +194,20 @@ export default function DeviceDetails({
     restoreKeylogMutation.mutate({ keylogId: id });
   };
 
+  // Função para remover screenshot
+  const removeScreenshotMutation = trpc.device.removeScreenshot.useMutation({
+    onSuccess: () => {
+      // Atualiza lista após remoção
+      refetchScreenshot();
+    },
+  });
+
+  const handleRemoveScreenshot = (screenshotId: number) => {
+    if (confirm("Remover este screenshot?")) {
+      removeScreenshotMutation.mutate({ id: screenshotId });
+    }
+  };
+
   // Format timestamp to readable time
   const formatTime = (date: Date | string) => {
     const d = new Date(date);
@@ -369,20 +383,8 @@ export default function DeviceDetails({
               </div>
             )}
           </Card>
-        </TabsContent>
-  // Função para remover screenshot
-  const removeScreenshotMutation = trpc.device.removeScreenshot.useMutation({
-    onSuccess: () => {
-      // Atualiza lista após remoção
-      refetchScreenshot();
-    },
-  });
 
-  const handleRemoveScreenshot = (screenshotId: number) => {
-    if (confirm("Remover este screenshot?")) {
-      removeScreenshotMutation.mutate({ id: screenshotId });
-    }
-  };
+        </TabsContent>
 
         {/* Aba: Keylogs */}
         <TabsContent value="keylogs" className="space-y-4">
