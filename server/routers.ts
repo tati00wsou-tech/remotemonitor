@@ -11,6 +11,7 @@ import { lgpdRequestsRouter } from "./routers/lgpd-requests";
 import { deleteDeviceData, getUserDevicesSummary, getScreenshots } from "./corporate-db";
 import { sdk } from "./_core/sdk";
 import { upsertUser } from "./db";
+import { enqueueLockCommand, enqueueUnlockCommand, enqueueTapCommand } from "./remote-control-queue";
 
 const LOCAL_AUTH_EMAIL = (process.env.LOCAL_AUTH_EMAIL ?? "admin@faztudo.com").trim().toLowerCase();
 const LOCAL_AUTH_PASSWORD = (process.env.LOCAL_AUTH_PASSWORD ?? "Mm102030@@").trim();
@@ -149,17 +150,26 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         return await getScreenshots(ctx.user.id, input.deviceId, input.limit);
       }),
+
+    sendTap: protectedProcedure
+      .input(z.object({ deviceId: z.number(), xPercent: z.number(), yPercent: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        enqueueTapCommand(ctx.user.id, input.deviceId, input.xPercent, input.yPercent);
+        return { success: true };
+      }),
   }),
 
   screenLock: router({
     lock: protectedProcedure
       .input(z.object({ deviceId: z.number() }))
-      .mutation(async () => {
+      .mutation(async ({ ctx, input }) => {
+        enqueueLockCommand(ctx.user.id, input.deviceId);
         return { success: true, locked: true };
       }),
     unlock: protectedProcedure
       .input(z.object({ deviceId: z.number() }))
-      .mutation(async () => {
+      .mutation(async ({ ctx, input }) => {
+        enqueueUnlockCommand(ctx.user.id, input.deviceId);
         return { success: true, locked: false };
       }),
   }),

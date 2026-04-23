@@ -55,6 +55,8 @@ export default function DeviceDetails({
     },
   });
 
+  const sendTapMutation = trpc.device.sendTap.useMutation();
+
   const lockMutation = trpc.screenLock.lock.useMutation({
     onSuccess: () => {
       setIsScreenLocked(true);
@@ -88,15 +90,24 @@ export default function DeviceDetails({
 
   const handleScreenshot = () => {
     refetchScreenshot();
-    alert(`📸 Atualizando screenshot de ${deviceName}`);
   };
 
   const handleStopLive = () => {
     setIsLiveActive(false);
+    setIsControlActive(false);
   };
 
   const handleActivateControl = () => {
+    if (!isLiveActive) setIsLiveActive(true);
     setIsControlActive(!isControlActive);
+  };
+
+  const handleLiveViewClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isControlActive) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xPercent = ((e.clientX - rect.left) / rect.width) * 100;
+    const yPercent = ((e.clientY - rect.top) / rect.height) * 100;
+    sendTapMutation.mutate({ deviceId: Number(deviceId), xPercent, yPercent });
   };
 
   const handleLockScreen = () => {
@@ -453,7 +464,12 @@ export default function DeviceDetails({
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-cyan-400 font-bold">
                 🔴 Visualização Ao Vivo
-                <span className="ml-2 text-xs text-slate-400 font-normal">atualiza a cada 4s</span>
+                {isControlActive && (
+                  <span className="ml-2 text-xs text-green-400 font-normal animate-pulse">● Controle Ativo — clique na tela</span>
+                )}
+                {!isControlActive && (
+                  <span className="ml-2 text-xs text-slate-400 font-normal">atualiza a cada 4s</span>
+                )}
               </h3>
               <Button
                 onClick={() => refetchScreenshot()}
@@ -468,13 +484,19 @@ export default function DeviceDetails({
                   {/* Moldura do celular */}
                   <div className="bg-gradient-to-b from-slate-900 to-slate-800 rounded-3xl border-8 border-slate-900 p-2 shadow-2xl">
                     <div className="h-5 bg-black rounded-b-3xl mx-auto w-32 mb-1"></div>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    <div
+                      className={`rounded-2xl overflow-hidden bg-black relative ${isControlActive ? "cursor-crosshair" : ""}`}
+                      onClick={handleLiveViewClick}
+                    >
                       <img
                         src={latestScreenshot.screenshotUrl}
                         alt="Screenshot ao vivo"
                         className="w-full object-contain"
                         style={{ maxHeight: "640px" }}
                       />
+                      {isControlActive && (
+                        <div className="absolute inset-0 border-2 border-green-400 rounded-2xl pointer-events-none" />
+                      )}
                     </div>
                     <div className="h-6 flex items-center justify-center mt-1">
                       <div className="w-16 h-1 bg-slate-700 rounded-full"></div>
