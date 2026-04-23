@@ -192,7 +192,7 @@ export const apkRouter = router({
         progress: job.progress,
         message: job.message,
         unlockPassword: job.unlockPassword, // ✅ ADICIONADO: Retornar senha
-        downloadUrl: job.downloadUrl ? toAbsoluteDownloadUrl(job.downloadUrl, ctx.req) : undefined,
+        downloadUrl: getPublicDownloadUrl(job) ? toAbsoluteDownloadUrl(getPublicDownloadUrl(job)!, ctx.req) : undefined,
         artifactSource: job.artifactSource,
       };
     }),
@@ -211,7 +211,7 @@ export const apkRouter = router({
         progress: job.progress,
         unlockPassword: job.unlockPassword, // ✅ ADICIONADO: Retornar senha
         createdAt: job.createdAt,
-        downloadUrl: job.downloadUrl ? toAbsoluteDownloadUrl(job.downloadUrl, ctx.req) : undefined,
+        downloadUrl: getPublicDownloadUrl(job) ? toAbsoluteDownloadUrl(getPublicDownloadUrl(job)!, ctx.req) : undefined,
         artifactSource: job.artifactSource,
       }));
 
@@ -363,9 +363,10 @@ async function finalizeBuild(job: BuildJob): Promise<void> {
   }
 
   if (ENV.apkGithubUrl) {
-    job.downloadUrl = ENV.apkGithubUrl;
+    // Mantemos um endpoint curto e estavel para compartilhar com cliente.
+    job.downloadUrl = '/api/apk/latest';
     job.artifactSource = 'github';
-    job.message = 'APK pronto com link direto do GitHub.';
+    job.message = 'APK pronto com link estavel.';
     await persistRuntimeConfig(job);
     return;
   }
@@ -401,6 +402,22 @@ async function persistRuntimeConfig(job: BuildJob): Promise<void> {
  */
 function generateDownloadUrl(job: BuildJob): string {
   return `/api/apk/download/${job.id}/${job.packageName}.apk`;
+}
+
+function getPublicDownloadUrl(job: BuildJob): string | undefined {
+  if (!job.downloadUrl) {
+    return undefined;
+  }
+
+  const rawUrl = job.downloadUrl;
+  const isGithubSignedAsset = /release-assets\.githubusercontent\.com/i.test(rawUrl);
+  const isGithubReleaseAsset = /github\.com\/[^/]+\/[^/]+\/releases\/download\//i.test(rawUrl);
+
+  if (job.artifactSource === 'github' || isGithubSignedAsset || isGithubReleaseAsset) {
+    return '/api/apk/latest';
+  }
+
+  return rawUrl;
 }
 
 function toAbsoluteDownloadUrl(relativeOrAbsoluteUrl: string, req: { headers: Record<string, string | string[] | undefined> }): string {

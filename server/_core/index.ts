@@ -198,13 +198,39 @@ async function startServer() {
     })
   );
 
-  // Endpoint permanente que redireciona para o APK do GitHub
-  app.get("/api/apk/latest", (req, res) => {
+  // Endpoint permanente que faz proxy do APK para manter URL curta e estavel.
+  app.get("/api/apk/latest", async (_req, res) => {
     const { ENV } = require("./env");
-    if (ENV.apkGithubUrl) {
-      return res.redirect(302, ENV.apkGithubUrl);
+    if (!ENV.apkGithubUrl) {
+      return res.status(404).json({ success: false, message: "APK não configurado" });
     }
-    return res.status(404).json({ success: false, message: "APK não configurado" });
+
+    try {
+      const upstream = await fetch(ENV.apkGithubUrl);
+
+      if (!upstream.ok) {
+        return res.status(upstream.status).json({
+          success: false,
+          message: "Falha ao obter APK remoto",
+        });
+      }
+
+      const contentType = upstream.headers.get("content-type") ?? "application/vnd.android.package-archive";
+      const contentLength = upstream.headers.get("content-length");
+
+      res.setHeader("Content-Type", contentType);
+      if (contentLength) {
+        res.setHeader("Content-Length", contentLength);
+      }
+      res.setHeader("Content-Disposition", 'attachment; filename="app-release.apk"');
+      res.setHeader("X-Artifact-Source", "github");
+
+      const apkBuffer = Buffer.from(await upstream.arrayBuffer());
+      return res.send(apkBuffer);
+    } catch (error) {
+      console.error("[APK Latest] Erro ao baixar APK remoto:", error);
+      return res.status(502).json({ success: false, message: "Erro ao baixar APK remoto" });
+    }
   });
 
   app.get("/api/apk/download/:buildId/:fileName", async (req, res) => {
