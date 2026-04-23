@@ -375,7 +375,21 @@ export default function APKBuilderPage() {
                   >
                     📥 Baixar APK
                   </a>
-                </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      <input
+                        readOnly
+                        value={downloadUrl}
+                        className="flex-1 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-slate-300 select-all"
+                        onClick={e => (e.target as HTMLInputElement).select()}
+                      />
+                      <button
+                        onClick={() => navigator.clipboard.writeText(downloadUrl)}
+                        className="bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-1 rounded"
+                      >
+                        Copiar
+                      </button>
+                    </div>
+                  </div>
               )}
 
 
