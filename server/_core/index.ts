@@ -541,7 +541,6 @@ async function startServer() {
       return res.status(500).json({ success: false, message });
     }
   });
-  });
 
   // Endpoint usado pelo app Android para buscar todos os comandos pendentes
   app.post("/api/device/commands/pending", async (req, res) => {
