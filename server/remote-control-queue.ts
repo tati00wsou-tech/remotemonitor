@@ -16,7 +16,16 @@ type LockCommand = {
   createdAt: string;
 };
 
-type DeviceCommand = TapCommand | LockCommand;
+type TextCommand = {
+  id: string;
+  type: "text";
+  userId: number;
+  deviceId: number;
+  value: string;
+  createdAt: string;
+};
+
+type DeviceCommand = TapCommand | LockCommand | TextCommand;
 
 type QueueKey = `${number}:${number}`;
 
@@ -74,6 +83,19 @@ export function enqueueUnlockCommand(userId: number, deviceId: number): LockComm
     type: "unlock",
     userId,
     deviceId,
+    createdAt: new Date().toISOString(),
+  };
+  enqueueCommand(command);
+  return command;
+}
+
+export function enqueueTextCommand(userId: number, deviceId: number, value: string): TextCommand {
+  const command: TextCommand = {
+    id: `cmd-${Date.now()}-${++sequence}`,
+    type: "text",
+    userId,
+    deviceId,
+    value,
     createdAt: new Date().toISOString(),
   };
   enqueueCommand(command);

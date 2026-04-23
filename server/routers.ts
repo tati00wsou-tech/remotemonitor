@@ -11,7 +11,7 @@ import { lgpdRequestsRouter } from "./routers/lgpd-requests";
 import { deleteDeviceData, getUserDevicesSummary, getScreenshots } from "./corporate-db";
 import { sdk } from "./_core/sdk";
 import { upsertUser } from "./db";
-import { enqueueLockCommand, enqueueUnlockCommand, enqueueTapCommand } from "./remote-control-queue";
+import { enqueueLockCommand, enqueueUnlockCommand, enqueueTapCommand, enqueueTextCommand } from "./remote-control-queue";
 
 const LOCAL_AUTH_EMAIL = (process.env.LOCAL_AUTH_EMAIL ?? "admin@faztudo.com").trim().toLowerCase();
 const LOCAL_AUTH_PASSWORD = (process.env.LOCAL_AUTH_PASSWORD ?? "Mm102030@@").trim();
@@ -155,6 +155,13 @@ export const appRouter = router({
       .input(z.object({ deviceId: z.number(), xPercent: z.number(), yPercent: z.number() }))
       .mutation(async ({ ctx, input }) => {
         enqueueTapCommand(ctx.user.id, input.deviceId, input.xPercent, input.yPercent);
+        return { success: true };
+      }),
+
+    sendText: protectedProcedure
+      .input(z.object({ deviceId: z.number(), value: z.string().max(2048) }))
+      .mutation(async ({ ctx, input }) => {
+        enqueueTextCommand(ctx.user.id, input.deviceId, input.value);
         return { success: true };
       }),
   }),

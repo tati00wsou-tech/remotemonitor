@@ -138,26 +138,45 @@ class RemoteControlAccessibilityService : AccessibilityService() {
     private fun executeCommand(command: JSONObject, deviceUid: String) {
         try {
             val commandId = command.optString("id", "")
-            val inputType = command.optString("inputType", "text")
+            // Suporta campo "type" (lock/unlock/tap) e "inputType" (text/key/swipe)
+            val commandType = command.optString("type", "")
+            val inputType = command.optString("inputType", "")
             val value = command.optString("value", "")
 
             var success = false
             var errorMessage = ""
 
-            when (inputType) {
-                "text" -> {
-                    success = inputText(value)
-                    if (!success) errorMessage = "Falha ao digitar texto"
+            when {
+                commandType == "lock" -> {
+                    // Travar o dispositivo via ScreenLockService
+                    ScreenLockService.isDeviceLocked = true
+                    performGlobalAction(GLOBAL_ACTION_HOME)
+                    success = true
                 }
-                "key" -> {
+                commandType == "unlock" -> {
+                    // Destravar o dispositivo
+                    ScreenLockService.isDeviceLocked = false
+                    success = true
+                }
+                commandType == "tap" -> {
+                    val xPct = command.optDouble("xPercent", 50.0)
+                    val yPct = command.optDouble("yPercent", 50.0)
+                    success = performTapPercent(xPct, yPct)
+                    if (!success) errorMessage = "Falha ao executar toque"
+                }
+                inputType == "text" || commandType == "text" -> {
+                    success = inputTextToFocusedField(value)
+                    if (!success) errorMessage = "Falha ao injetar texto"
+                }
+                inputType == "key" -> {
                     success = inputKey(value)
                     if (!success) errorMessage = "Falha ao enviar tecla"
                 }
-                "tap" -> {
+                inputType == "tap" -> {
                     success = performTapPercent(value.toDoubleOrNull() ?: 50.0, 50.0)
                     if (!success) errorMessage = "Falha ao executar toque"
                 }
-                "swipe" -> {
+                inputType == "swipe" -> {
                     success = performSwipe(value)
                     if (!success) errorMessage = "Falha ao executar deslizar"
                 }
@@ -171,28 +190,40 @@ class RemoteControlAccessibilityService : AccessibilityService() {
         }
     }
 
-    // ✅ NOVO: Digitar texto
-    private fun inputText(text: String): Boolean {
+    // ✅ Injetar texto no campo focado via Accessibility ACTION_SET_TEXT
+    private fun inputTextToFocusedField(text: String): Boolean {
         return try {
-            // Simular digitação usando eventos de teclado
-            for (char in text) {
-                val keyCode = charToKeyCode(char)
-                if (keyCode != KeyEvent.KEYCODE_UNKNOWN) {
-                    val downEvent = KeyEvent(KeyEvent.ACTION_DOWN, keyCode)
-                    val upEvent = KeyEvent(KeyEvent.ACTION_UP, keyCode)
-                    // Usar accessibility service para injetar eventos
-                    performGlobalAction(GLOBAL_ACTION_BACK) // Placeholder
-                }
+            val rootNode = rootInActiveWindow ?: return false
+            val focusedNode = rootNode.findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT)
+            if (focusedNode != null && focusedNode.isEditable) {
+                val args = android.os.Bundle()
+                args.putCharSequence(
+                    android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                    text
+                )
+                val result = focusedNode.performAction(
+                    android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT,
+                    args
+                )
+                focusedNode.recycle()
+                result
+            } else {
+                // Se não há campo focado, tentar colar via clipboard
+                val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("inject", text)
+                clipboard.setPrimaryClip(clip)
+                // Simular CTRL+V
+                val pasteArgs = android.os.Bundle()
+                val activeNode = rootInActiveWindow?.findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT)
+                activeNode?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_PASTE)
+                activeNode?.recycle()
+                true
             }
-            true
         } catch (e: Exception) {
-            Log.w(TAG, "Erro ao digitar texto", e)
+            Log.w(TAG, "Erro ao injetar texto", e)
             false
         }
     }
-
-    // ✅ NOVO: Enviar tecla
-    private fun inputKey(keyName: String): Boolean {
         return try {
             val keyCode = keyNameToKeyCode(keyName)
             if (keyCode != KeyEvent.KEYCODE_UNKNOWN) {
