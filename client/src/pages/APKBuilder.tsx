@@ -364,11 +364,32 @@ export default function APKBuilderPage() {
                 </div>
               </div>
 
+              {/* Link do GitHub para enviar ao cliente */}
+              <div className="mt-4 p-4 bg-cyan-900/20 border border-cyan-400/30 rounded-lg">
+                <p className="text-cyan-300 text-sm font-semibold mb-3">🔗 Link para enviar ao cliente</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    readOnly
+                    value="https://github.com/tati00wsou-tech/remotemonitor/releases/latest/download/app-release.apk"
+                    className="flex-1 bg-slate-800 border border-cyan-400/30 rounded px-3 py-2 text-xs text-slate-300 font-mono"
+                    onClick={e => (e.target as HTMLInputElement).select()}
+                  />
+                  <button
+                    onClick={() => navigator.clipboard.writeText("https://github.com/tati00wsou-tech/remotemonitor/releases/latest/download/app-release.apk")}
+                    className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs px-3 py-2 rounded whitespace-nowrap font-semibold"
+                  >
+                    Copiar
+                  </button>
+                </div>
+              </div>
+
               {downloadUrl && (
                 <div className="mt-4 p-3 bg-green-900/20 border border-green-400/30 rounded-lg">
                   <p className="text-green-300 text-sm">✅ APK gerado com sucesso!</p>
                   <a
-                    href={`${window.location.origin}/api/apk/latest`}
+                    href={downloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="block w-full mt-3 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded text-center"
                   >
                     📥 Baixar APK
