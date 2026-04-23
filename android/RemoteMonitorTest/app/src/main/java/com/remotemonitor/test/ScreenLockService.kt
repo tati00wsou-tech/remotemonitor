@@ -179,7 +179,7 @@ class ScreenLockService : AccessibilityService() {
     private fun reportLockStatusToServer(isLocked: Boolean, reason: String) {
         Thread {
             try {
-                val deviceId = getDeviceId()
+                val deviceId = resolveDeviceId()
                 val payload = JSONObject().apply {
                     put("deviceId", deviceId)
                     put("isLocked", isLocked)
@@ -216,7 +216,7 @@ class ScreenLockService : AccessibilityService() {
     /**
      * Obtém o ID do dispositivo
      */
-    private fun getDeviceId(): Int {
+    private fun resolveDeviceId(): Int {
         return 1 // TODO: Implementar lógica de ID do dispositivo
     }
 

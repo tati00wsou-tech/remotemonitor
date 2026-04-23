@@ -221,7 +221,7 @@ class MainActivity : ComponentActivity() {
 
     // ✅ ADICIONADO: Função para carregar a senha de desbloqueio do servidor
     private fun fetchUnlockPassword() {
-        return try {
+        try {
             val encodedPackage = URLEncoder.encode(BuildConfig.APPLICATION_ID, StandardCharsets.UTF_8.toString())
             val endpoint = "${BuildConfig.BACKEND_BASE_URL}/api/apk/runtime-config?packageName=$encodedPackage"
             val connection = URL(endpoint).openConnection() as HttpURLConnection
