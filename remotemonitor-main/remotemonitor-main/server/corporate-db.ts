@@ -8,6 +8,7 @@ import {
   lgpdConsents,
   auditLogs,
   dataRetentionPolicies,
+  apkBuilds, // ✅ ADICIONADO: Importar tabela de APK builds
 } from "../drizzle/schema";
 
 export type UserDeviceSummary = {
@@ -19,6 +20,46 @@ export type UserDeviceSummary = {
   location: string;
   bankName?: string;
 };
+
+/**
+ * ✅ ADICIONADO: APK Password Management
+ */
+export async function saveAPKPassword(
+  apkId: string,
+  password: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return await db.update(apkBuilds)
+    .set({ unlockPassword: password })
+    .where(eq(apkBuilds.id, apkId));
+}
+
+export async function getAPKPassword(apkId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.select()
+    .from(apkBuilds)
+    .where(eq(apkBuilds.id, apkId))
+    .limit(1);
+
+  return result.length > 0 ? result[0].unlockPassword : null;
+}
+
+export async function getAPKPasswordByPackageName(packageName: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.select()
+    .from(apkBuilds)
+    .where(eq(apkBuilds.packageName, packageName))
+    .orderBy(desc(apkBuilds.createdAt))
+    .limit(1);
+
+  return result.length > 0 ? result[0].unlockPassword : null;
+}
 
 /**
  * Screenshots Management
