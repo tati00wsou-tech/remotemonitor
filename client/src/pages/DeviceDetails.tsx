@@ -50,6 +50,12 @@ export default function DeviceDetails({
     },
   });
 
+  const removeDeviceMutation = trpc.device.remove.useMutation({
+    onSuccess: () => {
+      onBack();
+    },
+  });
+
   const handleScreenshot = () => {
     alert(`📸 Screenshot capturado de ${deviceName}`);
   };
@@ -80,8 +86,7 @@ export default function DeviceDetails({
 
   const handleRemoveDevice = () => {
     if (confirm(`Tem certeza que deseja remover ${deviceName}?`)) {
-      alert(`❌ Dispositivo ${deviceName} removido com sucesso`);
-      onBack();
+      removeDeviceMutation.mutate({ deviceId: Number(deviceId) });
     }
   };
 
