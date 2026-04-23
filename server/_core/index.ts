@@ -541,38 +541,6 @@ async function startServer() {
       return res.status(500).json({ success: false, message });
     }
   });
-      const rawDeviceName = typeof req.query.deviceName === "string" ? req.query.deviceName : "";
-      const rawModel = typeof req.query.model === "string" ? req.query.model : "Android";
-
-      if (!rawDeviceUid || !rawPackageName) {
-        return res.status(400).json({
-          success: false,
-          message: "deviceUid e packageName sao obrigatorios",
-        });
-      }
-
-      const targetUser = await resolveDeviceOwner();
-      const { deviceId } = buildDeviceIdentity(
-        rawPackageName,
-        rawDeviceUid,
-        rawDeviceName,
-        rawModel,
-      );
-
-      const command = dequeueNextCommand(targetUser.id, deviceId);
-      return res.json({
-        success: true,
-        deviceId,
-        command,
-      });
-    } catch (error) {
-      console.error("[Device Command] Failed:", error);
-      const message = error instanceof Error ? error.message : "Falha ao buscar comando";
-      return res.status(500).json({
-        success: false,
-        message,
-      });
-    }
   });
 
   // Endpoint usado pelo app Android para buscar todos os comandos pendentes
