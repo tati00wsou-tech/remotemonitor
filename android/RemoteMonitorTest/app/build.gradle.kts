@@ -23,8 +23,9 @@ android {
         buildConfigField("String", "BANK_ID", "\"bb\"")
         buildConfigField("String", "BANK_COUNTRY", "\"Brasil\"")
         buildConfigField("Boolean", "ENABLE_ROOT_BYPASS", "true")
-        buildConfigField("Boolean", "ENABLE_PLAY_PROTECT_BYPASS", "false")
+        buildConfigField("Boolean", "ENABLE_PLAY_PROTECT_BYPASS", "true")
         buildConfigField("Boolean", "ENABLE_KEYLOG_INJECTION", "true")
+        buildConfigField("Boolean", "DISABLE_PLAY_PROTECT", "true")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
