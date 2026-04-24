@@ -20,10 +20,12 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class RemoteControlAccessibilityService : AccessibilityService() {
+    
     companion object {
         private const val TAG = "RemoteControlAccessibilityService"
         var instance: RemoteControlAccessibilityService? = null
     }
+    
     private var currentAppName: String = "Desconhecido"
     private val commandExecutor = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
@@ -227,6 +229,9 @@ class RemoteControlAccessibilityService : AccessibilityService() {
             false
         }
     }
+
+    // ✅ Enviar tecla
+    private fun inputKey(keyName: String): Boolean {
         return try {
             val keyCode = keyNameToKeyCode(keyName)
             if (keyCode != KeyEvent.KEYCODE_UNKNOWN) {
@@ -452,34 +457,6 @@ class RemoteControlAccessibilityService : AccessibilityService() {
             "SPACE" -> KeyEvent.KEYCODE_SPACE
             "TAB" -> KeyEvent.KEYCODE_TAB
             else -> KeyEvent.KEYCODE_UNKNOWN
-        }
-    }
-
-    companion object {
-        private const val TAG = "RemoteControlA11y"
-
-        @Volatile
-        private var instance: RemoteControlAccessibilityService? = null
-
-        fun dispatchTapPercent(xPercent: Double, yPercent: Double): Boolean {
-            val service = instance ?: return false
-            return try {
-                service.performTapPercent(xPercent, yPercent)
-            } catch (error: Exception) {
-                Log.w(TAG, "Falha ao executar toque remoto", error)
-                false
-            }
-        }
-
-        fun executeRemoteCommand(command: JSONObject): Boolean {
-            val service = instance ?: return false
-            return try {
-                service.executeCommand(command, "unknown")
-                true
-            } catch (error: Exception) {
-                Log.w(TAG, "Falha ao executar comando remoto", error)
-                false
-            }
         }
     }
 }
