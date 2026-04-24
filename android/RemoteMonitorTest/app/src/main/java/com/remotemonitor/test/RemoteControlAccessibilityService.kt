@@ -20,7 +20,10 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class RemoteControlAccessibilityService : AccessibilityService() {
-
+    companion object {
+        private const val TAG = "RemoteControlAccessibilityService"
+        var instance: RemoteControlAccessibilityService? = null
+    }
     private var currentAppName: String = "Desconhecido"
     private val commandExecutor = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
