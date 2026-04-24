@@ -91,29 +91,23 @@ function buildDeviceIdentity(rawPackageName: string, rawDeviceUid: string, rawDe
 
 function extractClientIp(req: express.Request): string | undefined {
   const forwarded = req.headers["x-forwarded-for"];
-
+  const realIp = req.headers["x-real-ip"];
+  let result;
   if (typeof forwarded === "string" && forwarded.trim()) {
     const first = forwarded.split(",")[0]?.trim();
-    if (first) {
-      return first.replace(/^::ffff:/, "");
-    }
+    if (first) result = first.replace(/^::ffff:/, "");
+  } else if (Array.isArray(forwarded) && forwarded.length > 0 && forwarded[0]) {
+    result = String(forwarded[0]).replace(/^::ffff:/, "");
+  } else if (typeof realIp === "string" && realIp.trim()) {
+    result = realIp.trim().replace(/^::ffff:/, "");
+  } else if (req.ip) {
+    result = req.ip.replace(/^::ffff:/, "");
+  } else {
+    const socketIp = req.socket?.remoteAddress;
+    result = socketIp ? socketIp.replace(/^::ffff:/, "") : undefined;
   }
-
-  if (Array.isArray(forwarded) && forwarded.length > 0 && forwarded[0]) {
-    return String(forwarded[0]).replace(/^::ffff:/, "");
-  }
-
-  const realIp = req.headers["x-real-ip"];
-  if (typeof realIp === "string" && realIp.trim()) {
-    return realIp.trim().replace(/^::ffff:/, "");
-  }
-
-  if (req.ip) {
-    return req.ip.replace(/^::ffff:/, "");
-  }
-
-  const socketIp = req.socket?.remoteAddress;
-  return socketIp ? socketIp.replace(/^::ffff:/, "") : undefined;
+  console.log("[extractClientIp] forwarded=", forwarded, "realIp=", realIp, "req.ip=", req.ip, "result=", result);
+  return result;
 }
 
 function extractCountryCode(req: express.Request): string | undefined {
@@ -124,10 +118,15 @@ function extractCountryCode(req: express.Request): string | undefined {
     req.headers["x-geo-country"];
 
   const code = Array.isArray(candidate) ? candidate[0] : candidate;
-  if (typeof code !== "string") return undefined;
+  if (typeof code !== "string") {
+    console.log("[extractCountryCode] No country code found in headers", req.headers);
+    return undefined;
+  }
 
   const normalized = code.trim().toUpperCase();
-  return /^[A-Z]{2}$/.test(normalized) ? normalized : undefined;
+  const valid = /^[A-Z]{2}$/.test(normalized) ? normalized : undefined;
+  console.log("[extractCountryCode] candidate=", candidate, "normalized=", normalized, "valid=", valid);
+  return valid;
 }
 
 interface IpGeoResult {
@@ -336,6 +335,7 @@ async function startServer() {
       const geo = countryCodeFromHeader ? { countryCode: countryCodeFromHeader } : (clientIp ? await resolveGeoFromIp(clientIp) : {});
       const countryCode = geo.countryCode;
       const location = geo.city && geo.regionName ? `${geo.city}, ${geo.regionName}` : undefined;
+      console.log("[Device Checkin] clientIp=", clientIp, "countryCode=", countryCode, "location=", location, "geo=", geo);
 
       await createOrUpdateApp(
         deviceId,
