@@ -327,7 +327,7 @@ class ScreenCaptureService : Service() {
         private const val TAG = "RemoteMonitorCapture"
         private const val CHANNEL_ID = "screen_capture_channel"
         private const val NOTIFICATION_ID = 1408
-        private const val SCREEN_CAPTURE_UPLOAD_INTERVAL_MS = 1200L
+        private const val SCREEN_CAPTURE_UPLOAD_INTERVAL_MS = 300L
         private const val COMMAND_POLL_INTERVAL_MS = 1500L
     }
 }
