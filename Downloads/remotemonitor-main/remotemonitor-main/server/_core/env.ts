@@ -1,0 +1,17 @@
+export const ENV = {
+  appId: process.env.VITE_APP_ID ?? "",
+  cookieSecret: process.env.JWT_SECRET ?? "",
+  databaseUrl: process.env.DATABASE_URL ?? "",
+  oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
+  ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
+  isProduction: process.env.NODE_ENV === "production",
+  forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
+  forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  easBuildToken: process.env.EAS_BUILD_TOKEN ?? "",
+  easProjectId: process.env.EAS_PROJECT_ID ?? "",
+  easBuildProfile: process.env.EAS_BUILD_PROFILE ?? "production",
+  apkGithubUrl: process.env.APK_GITHUB_URL ?? "",
+  runtimePanelUrl: process.env.RUNTIME_PANEL_URL ?? "",
+  runtimeAppName: process.env.RUNTIME_APP_NAME ?? "Acesso Seguro",
+  runtimePackageName: process.env.RUNTIME_PACKAGE_NAME ?? "com.acesso.seguro",
+};
