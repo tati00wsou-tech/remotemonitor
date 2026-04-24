@@ -372,7 +372,7 @@ class RemoteControlAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun performTapPercent(xPercent: Double, yPercent: Double): Boolean {
+        fun performTapPercent(xPercent: Double, yPercent: Double): Boolean {
         val bounds = getScreenBounds()
         val x = bounds.left + (bounds.width() * (xPercent / 100.0)).toFloat()
         val y = bounds.top + (bounds.height() * (yPercent / 100.0)).toFloat()
