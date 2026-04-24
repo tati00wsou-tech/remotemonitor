@@ -213,15 +213,8 @@ class ScreenCaptureService : Service() {
             return
         }
 
-        // ✅ CORRIGIDO: Usar a instância do serviço em vez de função estática
-        val service = RemoteControlAccessibilityService.instance
-        if (service != null) {
-            try {
-                service.performTapPercent(xPercent, yPercent)
-            } catch (e: Exception) {
-                Log.w(TAG, "Falha ao executar tap remoto", e)
-            }
-        } else {
+        val executed = RemoteControlAccessibilityService.dispatchTapPercent(xPercent, yPercent)
+        if (!executed) {
             Log.w(TAG, "Comando recebido, mas servico de acessibilidade nao esta ativo")
         }
     }
