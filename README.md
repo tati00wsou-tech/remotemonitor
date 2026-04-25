@@ -367,3 +367,5 @@ MIT
 
 **Desenvolvido com ❤️ em cyberpunk**
 "# remotemonitor" 
+#   r e m o t e m o n i t o r  
+ 
